@@ -1,8 +1,7 @@
 #include "types.h"
 #include "stat.h"
 #include "user.h"
-// just for test of svn, add some commment
-// just for test of svn, add some commment
+
 int
 main(int argc, char **argv)
 {
