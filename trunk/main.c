@@ -5,6 +5,8 @@
 #include "proc.h"
 #include "x86.h"
 
+// just for test of svn, add some commment
+
 static void bootothers(void);
 static void mpmain(void) __attribute__((noreturn));
 
