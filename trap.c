@@ -34,6 +34,13 @@ idtinit(void)
 void
 trap(struct trapframe *tf)
 {
+  if(cp == 0 || (tf->cs&3) == 0){
+    cprintf("trap %d from cpu %d eip %x\n",
+              tf->trapno, cpu(), tf->eip);
+  }else{
+    cprintf("pid %d %s: trap %d err %d on cpu %d eip %x\n",
+            cp->pid, cp->name, tf->trapno, tf->err, cpu(), tf->eip);
+  }
   if(tf->trapno == T_SYSCALL){
     if(cp->killed)
       exit();

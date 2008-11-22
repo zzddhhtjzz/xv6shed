@@ -5,11 +5,15 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "sched.h"
 
 struct spinlock proc_table_lock;
 
 struct proc proc[NPROC];
-static struct proc *initproc;
+struct proc *initproc;
+// by jimmy:
+// struct proc idleproc[NCPU];
+struct rq rq;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -19,6 +23,7 @@ void
 pinit(void)
 {
   initlock(&proc_table_lock, "proc_table");
+  init_rq_simple(&rq);
 }
 
 // Look in the process table for an UNUSED proc.
@@ -35,6 +40,9 @@ allocproc(void)
     p = &proc[i];
     if(p->state == UNUSED){
       p->state = EMBRYO;
+      // by jimmy: currently there is only 1 rq and 1 sched_class, so:
+      p->sched_class = &simple_sched_class;
+      p->rq = &rq;
       p->pid = nextpid++;
       release(&proc_table_lock);
       return p;
@@ -146,13 +154,38 @@ copyproc(struct proc *p)
   return np;
 }
 
+/*
+// alloc a idle process, just like what is doing up
+void
+allocidle(int cpuid){
+  struct proc* np = &(idleproc[cpuid]);
+  if((np->kstack = kalloc(KSTACKSIZE)) == 0){
+    np->state = UNUSED;
+    return;
+  }
+
+  np->tf = (struct trapframe*)(np->kstack + KSTACKSIZE) - 1;
+
+  // Set up new context to start executing at forkret (see below).
+  memset(&np->context, 0, sizeof(np->context));
+  np->context.eip = (uint)forkret;
+  np->context.esp = (uint)np->tf;
+
+  // Clear %eax so that fork system call returns 0 in child.
+  np->tf->eax = 0;
+  return;
+}
+*/
+
 // Set up first user process.
 void
 userinit(void)
 {
   struct proc *p;
   extern uchar _binary_initcode_start[], _binary_initcode_size[];
-  
+  //extern uchar _binary_idlecode_start[], _binary_idlecode_size[];
+  //int i;
+
   p = copyproc(0);
   p->sz = PAGE;
   p->mem = kalloc(p->sz);
@@ -174,8 +207,39 @@ userinit(void)
   memmove(p->mem, _binary_initcode_start, (int)_binary_initcode_size);
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->state = RUNNABLE;
+  p->sched_class->enqueue_proc(p->rq, p);
   
   initproc = p;
+
+  // set idle process
+  /*for(i=0; i<1; i++){
+    //allocidle(i);
+    //struct proc* p = &(idleproc[i]);
+    p = copyproc(0);
+    p->sz = PAGE;
+    p->mem = kalloc(p->sz);
+    p->cwd = namei("/");
+    memset(p->tf, 0, sizeof(*p->tf));
+    p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
+    p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
+    p->tf->es = p->tf->ds;
+    p->tf->ss = p->tf->ds;
+    p->tf->eflags = FL_IF;
+    p->tf->esp = p->sz;
+  
+    // Make return address readable; needed for some gcc.
+    p->tf->esp -= 4;
+    *(uint*)(p->mem + p->tf->esp) = 0xefefefef;
+
+    // On entry to user space, start executing at beginning of initcode.S.
+    p->tf->eip = 0xA000;
+    memmove(p->mem, _binary_idlecode_start, (int)_binary_idlecode_size);
+    safestrcpy(p->name, "idle", sizeof(p->name));
+    p->state = RUNNABLE;
+  }*/
+  /*cprintf("###############\n");
+  cprintf("ncpu: %d\n", ncpu);
+  cprintf("pid: %d\n", p->pid);*/
 }
 
 // Return currently running process.
@@ -190,6 +254,7 @@ curproc(void)
   return p;
 }
 
+/*
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -233,7 +298,36 @@ scheduler(void)
 
   }
 }
+*/
 
+// by jimmy:
+// schedule is the only interface that can swictch CPU from one
+// process another
+// must acquire the spinlock of rq before call this and release it 
+// after calling
+void
+schedule(void){
+  struct cpu *c;
+  struct proc* next;
+  c = &cpus[cpu()];
+
+  //if(cp is not running)
+  //   remove it from the queue
+  if((cp->state != RUNNABLE) && (cp->state != RUNNING))
+    cp->sched_class->dequeue_proc(cp->rq, cp);
+  
+  // get next proc to run 
+  next = cp->sched_class->pick_next_proc(cp->rq);
+
+  // swtch
+  c->curproc = next;
+  setupsegs(next);
+  next->state = RUNNING;
+  swtch(&cp->context, &next->context);
+  // may some bugs???
+}
+
+/*
 // Enter scheduler.  Must already hold proc_table_lock
 // and have changed curproc[cpu()]->state.
 void
@@ -249,15 +343,24 @@ sched(void)
     panic("sched locks");
 
   swtch(&cp->context, &cpus[cpu()].context);
-}
+}*/
 
 // Give up the CPU for one scheduling round.
 void
 yield(void)
 {
+  //lock the rq
   acquire(&proc_table_lock);
+  acquire(&(cp->rq->rq_lock));
   cp->state = RUNNABLE;
-  sched();
+
+  //sched();
+  // by jimmy:
+  cp->sched_class->yield_proc(cp->rq);
+  schedule();
+
+  // unlock rq
+  release(&(cp->rq->rq_lock));
   release(&proc_table_lock);
 }
 
@@ -298,7 +401,8 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   cp->chan = chan;
   cp->state = SLEEPING;
-  sched();
+  //sched();
+  schedule();	// by jimmy
 
   // Tidy up.
   cp->chan = 0;
@@ -318,16 +422,24 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+    if(p->state == SLEEPING && p->chan == chan){
       p->state = RUNNABLE;
+      p->sched_class->enqueue_proc(p->rq, p);
+    }
 }
 
 // Wake up all processes sleeping on chan.
 void
 wakeup(void *chan)
 {
+  // by jimmy: lock the rq
   acquire(&proc_table_lock);
+  acquire(&(cp->rq->rq_lock));
+
   wakeup1(chan);
+
+  // by jimmy: unlock rq
+  release(&(cp->rq->rq_lock));
   release(&proc_table_lock);
 }
 
@@ -344,8 +456,10 @@ kill(int pid)
     if(p->pid == pid){
       p->killed = 1;
       // Wake process from sleep if necessary.
-      if(p->state == SLEEPING)
+      if(p->state == SLEEPING){
         p->state = RUNNABLE;
+        p->sched_class->enqueue_proc(p->rq, p);
+      }
       release(&proc_table_lock);
       return 0;
     }
@@ -377,6 +491,8 @@ exit(void)
   iput(cp->cwd);
   cp->cwd = 0;
 
+  // lock rq
+  acquire(&(cp->rq->rq_lock));
   acquire(&proc_table_lock);
 
   // Parent might be sleeping in wait().
@@ -394,7 +510,7 @@ exit(void)
   // Jump into the scheduler, never to return.
   cp->killed = 0;
   cp->state = ZOMBIE;
-  sched();
+  schedule();	//by jimmy
   panic("zombie exit");
 }
 
