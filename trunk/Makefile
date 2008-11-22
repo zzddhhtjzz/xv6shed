@@ -17,6 +17,7 @@ OBJS = \
 	spinlock.o\
 	string.o\
 	swtch.o\
+	sched.o\
 	syscall.o\
 	sysfile.o\
 	sysproc.o\
@@ -67,6 +68,14 @@ initcode: initcode.S
 	$(OBJCOPY) -S -O binary initcode.out initcode
 	$(OBJDUMP) -S initcode.o > initcode.asm
 
+#idlecode: idlecode.S
+#	$(CC) $(CFLAGS) -nostdinc -I. -c idlecode.S
+#	$(LD) $(LDFLAGS) -N -e start -Ttext 0xA000 -o idlecode.out idlecode.o
+#	$(OBJCOPY) -S -O binary idlecode.out idlecode
+#	$(OBJDUMP) -S idlecode.o > idlecode.asm
+
+#kernel: $(OBJS) bootother initcode idlecode
+#	$(LD) $(LDFLAGS) -Ttext 0x100000 -e main -o kernel $(OBJS) -b binary initcode bootother idlecode
 kernel: $(OBJS) bootother initcode
 	$(LD) $(LDFLAGS) -Ttext 0x100000 -e main -o kernel $(OBJS) -b binary initcode bootother
 	$(OBJDUMP) -S kernel > kernel.asm
@@ -100,6 +109,7 @@ UPROGS=\
 	_forktest\
 	_grep\
 	_init\
+	_idle\
 	_kill\
 	_ln\
 	_ls\
