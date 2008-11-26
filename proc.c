@@ -12,7 +12,7 @@ struct spinlock proc_table_lock;
 struct proc proc[NPROC];
 struct proc *initproc;
 // by jimmy:
-// struct proc idleproc[NCPU];
+struct proc* idleproc[NCPU];
 struct rq rq;
 
 int nextpid = 1;
@@ -183,7 +183,7 @@ userinit(void)
 {
   struct proc *p;
   extern uchar _binary_initcode_start[], _binary_initcode_size[];
-  //extern uchar _binary_idlecode_start[], _binary_idlecode_size[];
+  extern uchar _binary_idlecode_start[], _binary_idlecode_size[];
   //int i;
 
   p = copyproc(0);
@@ -211,35 +211,32 @@ userinit(void)
   
   initproc = p;
 
-  // set idle process
-  /*for(i=0; i<1; i++){
-    //allocidle(i);
-    //struct proc* p = &(idleproc[i]);
-    p = copyproc(0);
-    p->sz = PAGE;
-    p->mem = kalloc(p->sz);
-    p->cwd = namei("/");
-    memset(p->tf, 0, sizeof(*p->tf));
-    p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
-    p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
-    p->tf->es = p->tf->ds;
-    p->tf->ss = p->tf->ds;
-    p->tf->eflags = FL_IF;
-    p->tf->esp = p->sz;
+  // init idle proc
+  p = copyproc(0);
+  p->sz = PAGE;
+  p->mem = kalloc(p->sz);
+  p->cwd = namei("/");
+  memset(p->tf, 0, sizeof(*p->tf));
+  p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
+  p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
+  p->tf->es = p->tf->ds;
+  p->tf->ss = p->tf->ds;
+  p->tf->eflags = FL_IF;
+  p->tf->esp = p->sz;
   
-    // Make return address readable; needed for some gcc.
-    p->tf->esp -= 4;
-    *(uint*)(p->mem + p->tf->esp) = 0xefefefef;
+  // Make return address readable; needed for some gcc.
+  p->tf->esp -= 4;
+  *(uint*)(p->mem + p->tf->esp) = 0xefefefef;
 
-    // On entry to user space, start executing at beginning of initcode.S.
-    p->tf->eip = 0xA000;
-    memmove(p->mem, _binary_idlecode_start, (int)_binary_idlecode_size);
+  // On entry to user space, start executing at beginning of initcode.S.
+  p->tf->eip = 0;
+  memmove(p->mem, _binary_idlecode_start, (int)_binary_idlecode_size);
     safestrcpy(p->name, "idle", sizeof(p->name));
-    p->state = RUNNABLE;
-  }*/
-  /*cprintf("###############\n");
-  cprintf("ncpu: %d\n", ncpu);
-  cprintf("pid: %d\n", p->pid);*/
+  p->state = RUNNABLE;
+  idleproc[0] = p;
+  cprintf("idleproc done!\n");
+
+  return;
 }
 
 // Return currently running process.
@@ -254,7 +251,7 @@ curproc(void)
   return p;
 }
 
-/*
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -275,7 +272,8 @@ scheduler(void)
     sti();
 
     // Loop over process table looking for process to run.
-    acquire(&proc_table_lock);
+    // acquire(&proc_table_lock);
+    acquire(&rq.rq_lock);
     for(i = 0; i < NPROC; i++){
       p = &proc[i];
       if(p->state != RUNNABLE)
@@ -287,6 +285,8 @@ scheduler(void)
       c->curproc = p;
       setupsegs(p);
       p->state = RUNNING;
+
+      // by jimmy:
       swtch(&c->context, &p->context);
 
       // Process is done running for now.
@@ -294,11 +294,11 @@ scheduler(void)
       c->curproc = 0;
       setupsegs(0);
     }
-    release(&proc_table_lock);
-
+    //release(&proc_table_lock);
+    release(&rq.rq_lock);
   }
 }
-*/
+
 
 // by jimmy:
 // schedule is the only interface that can swictch CPU from one
@@ -308,22 +308,23 @@ scheduler(void)
 void
 schedule(void){
   struct cpu *c;
-  struct proc* next;
+  struct proc* next, *prev;
   c = &cpus[cpu()];
+  prev = cp;
 
   //if(cp is not running)
   //   remove it from the queue
-  if((cp->state != RUNNABLE) && (cp->state != RUNNING))
-    cp->sched_class->dequeue_proc(cp->rq, cp);
+  if((prev->state != RUNNABLE) && (prev->state != RUNNING))
+    prev->sched_class->dequeue_proc(prev->rq, prev);
   
   // get next proc to run 
-  next = cp->sched_class->pick_next_proc(cp->rq);
+  next = prev->sched_class->pick_next_proc(prev->rq);
 
   // swtch
   c->curproc = next;
   setupsegs(next);
   next->state = RUNNING;
-  swtch(&cp->context, &next->context);
+  swtch(&prev->context, &next->context);
   // may some bugs???
 }
 

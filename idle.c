@@ -9,11 +9,11 @@ int
 main(void)
 {
   int i;
-  while(1){
-    i++;
+//  while(1){
+//    i++;
  //   for(i=0; i<100000; i++)
  //     ;
-  }
-//  printf(1,"",i);
+ // }
+  printf(1,"in idle\n",i);
   return 0;
 }

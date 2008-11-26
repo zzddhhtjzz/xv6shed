@@ -6,6 +6,7 @@
 .globl alltraps
 alltraps:
   # Build trap frame.
+  # cli
   pushl %ds
   pushl %es
   pushal

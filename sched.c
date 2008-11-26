@@ -29,6 +29,8 @@ void init_rq_simple(struct rq* rq){
 }
 
 void enqueue_proc_simple(struct rq *rq, struct proc *p){
+//  cprintf("in enqueue: %s\n", p->name);
+
   // alloc
   if(rq->free_list == 0)
     panic("kernel panic: Do not support procs more than NPROC!(in enqueue_proc_simple)\n");
@@ -50,6 +52,9 @@ void enqueue_proc_simple(struct rq *rq, struct proc *p){
 }
 
 void dequeue_proc_simple(struct rq *rq, struct proc *p){
+  // by jimmy:
+  extern struct proc* idleproc[];//debug
+
   // search
   struct rq_node* cnode;
   if(rq->next_to_run->proc == p)
@@ -57,12 +62,17 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
   else{
     cnode = rq->next_to_run->prev;
     while(cnode->proc != p){
-      if(cnode == rq->next_to_run)
+      if(cnode == rq->next_to_run){
+	if(p == idleproc[0])
+          return;
+	cprintf("cp->state = %d\n", p->state);
         panic("Kernel panic: Cannot find proc in dequeue_proc_simple\n");
+      }
       cnode = cnode->prev;
     }
   }
 
+//  cprintf("in dequeue: %s\n", p->name);
   // delete
   if(cnode->next == cnode){
     rq->next_to_run = 0;
@@ -71,6 +81,7 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
     struct rq_node* next = cnode->next;
     prev->next = next;
     next->prev = prev;
+    rq->next_to_run = next;
   }
 
   // free
@@ -81,16 +92,14 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
 void yield_proc_simple(struct rq *rq){
   if(rq->next_to_run)
     rq->next_to_run = rq->next_to_run->next;
-  else
-    panic("Empty proc yield in yield_proc_simple\n");
 }
 
 struct proc* pick_next_proc_simple(struct rq *rq){
-  extern struct proc* initproc;//debug
+  extern struct proc* idleproc[];//debug
   if(rq->next_to_run)
     return rq->next_to_run->proc;
   else
-    return initproc;
+    return idleproc[0];
 }
 
 void proc_tick_simple(struct rq* rq, struct proc* p){
