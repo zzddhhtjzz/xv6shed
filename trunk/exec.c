@@ -16,9 +16,6 @@ exec(char *path, char **argv)
   struct inode *ip;
   struct proghdr ph;
 
-  //by jimmy:
-  cprintf("exec: %s", path);
-
   if((ip = namei(path)) == 0)
     return -1;
   ilock(ip);

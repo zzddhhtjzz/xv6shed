@@ -58,7 +58,10 @@ mpmain(void)
   // by jimmy:
   if(initproc)
     cprintf("initproc->tf = %x\n", initproc->tf);
-  forkret1(initproc->tf);
+  //forkret1(initproc->tf);
+
+  //initproc->state = RUNNABLE;
+  scheduler();
 }
 
 static void

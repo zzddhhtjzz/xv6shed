@@ -1,5 +1,8 @@
 // by jimmy:
 
+#ifndef __SCHED_H
+#define __SCHED_H
+
 void init_rq_simple(struct rq*);
 
 struct sched_class{
@@ -31,3 +34,5 @@ struct rq{
   struct rq_node* next_to_run;	// next proc to run
   struct rq_node* free_list;	// all the free proc
 };
+
+#endif

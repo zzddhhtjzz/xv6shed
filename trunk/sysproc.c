@@ -3,6 +3,8 @@
 #include "param.h"
 #include "mmu.h"
 #include "proc.h"
+#include "spinlock.h"
+#include "sched.h"
 
 int
 sys_fork(void)
@@ -10,10 +12,14 @@ sys_fork(void)
   int pid;
   struct proc *np;
 
-  if((np = copyproc(cp)) == 0)
+  cprintf("in sysfork\n");
+  if((np = copyproc(cp)) == 0){
+    cprintf("sysfork failed here\n");
     return -1;
+  }
   pid = np->pid;
   np->state = RUNNABLE;
+  np->sched_class->enqueue_proc(np->rq, np);
   return pid;
 }
 

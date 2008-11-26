@@ -6,6 +6,7 @@
 # exec(idle, argv)
 .globl start
 start:
+  jmp start
   pushl $argv
   pushl $idle
   pushl $0

@@ -124,8 +124,11 @@ void
 syscall(void)
 {
   int num;
-  
+
   num = cp->tf->eax;
+  // by jimmy: since syscall5 is too common that we will not output it
+  /*if(num != SYS_write)
+    cprintf("syscall %d: %s\n", num, cp->name);*/
   if(num >= 0 && num < NELEM(syscalls) && syscalls[num])
     cp->tf->eax = syscalls[num]();
   else {

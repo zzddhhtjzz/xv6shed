@@ -25,6 +25,9 @@ initlock(struct spinlock *lock, char *name)
 void
 acquire(struct spinlock *lock)
 {
+  // by jimmy:
+  return;
+
   pushcli();
   if(holding(lock))
     panic("acquire");
@@ -47,6 +50,9 @@ acquire(struct spinlock *lock)
 void
 release(struct spinlock *lock)
 {
+  //by jimmy:
+  return;
+
   if(!holding(lock))
     panic("release");
 
