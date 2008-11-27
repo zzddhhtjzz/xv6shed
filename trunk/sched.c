@@ -29,7 +29,7 @@ void init_rq_simple(struct rq* rq){
 }
 
 void enqueue_proc_simple(struct rq *rq, struct proc *p){
-//  cprintf("in enqueue: %s\n", p->name);
+  //cprintf("in enqueue: %x\n", p->pid);
 
   // alloc
   if(rq->free_list == 0)
@@ -54,9 +54,12 @@ void enqueue_proc_simple(struct rq *rq, struct proc *p){
 void dequeue_proc_simple(struct rq *rq, struct proc *p){
   // by jimmy:
   extern struct proc* idleproc[];//debug
+  //cprintf("in dequeue: %x\n", p->pid);
 
   // search
   struct rq_node* cnode;
+  if(p->pid == 3)
+    cprintf("");
   if(rq->next_to_run->proc == p)
     cnode = rq->next_to_run;
   else{
@@ -65,7 +68,7 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
       if(cnode == rq->next_to_run){
 	if(p == idleproc[0])
           return;
-	cprintf("cp->state = %d\n", p->state);
+	cprintf("proc: %s, state = %d\n", p->name, p->state);
         panic("Kernel panic: Cannot find proc in dequeue_proc_simple\n");
       }
       cnode = cnode->prev;
@@ -107,6 +110,7 @@ void proc_tick_simple(struct rq* rq, struct proc* p){
 }
 
 const struct sched_class simple_sched_class = {
+  .init_rq		= init_rq_simple,
   .enqueue_proc		= enqueue_proc_simple,
   .dequeue_proc		= dequeue_proc_simple,
   .yield_proc		= yield_proc_simple,
