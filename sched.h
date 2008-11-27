@@ -6,6 +6,8 @@
 void init_rq_simple(struct rq*);
 
 struct sched_class{
+  // init the rq
+  void (*init_rq)(struct rq *rq);
   // put the proc into runqueue
   void (*enqueue_proc) (struct rq *rq, struct proc *p);
   // get the proc out runqueue

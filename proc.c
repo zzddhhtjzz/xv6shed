@@ -114,11 +114,14 @@ copyproc(struct proc *p)
   struct proc *np;
 
   // Allocate process.
-  if((np = allocproc()) == 0)
+  if((np = allocproc()) == 0){
+    cprintf("(np = allocproc()) == 0");
     return 0;
+  }
 
   // Allocate kernel stack.
   if((np->kstack = kalloc(KSTACKSIZE)) == 0){
+    cprintf("(np->kstack = kalloc(KSTACKSIZE)) == 0");
     np->state = UNUSED;
     return 0;
   }
@@ -130,6 +133,7 @@ copyproc(struct proc *p)
   
     np->sz = p->sz;
     if((np->mem = kalloc(np->sz)) == 0){
+      cprintf("(np->mem = kalloc(np->sz)) == 0");
       kfree(np->kstack, KSTACKSIZE);
       np->kstack = 0;
       np->state = UNUSED;
@@ -272,8 +276,8 @@ scheduler(void)
     sti();
 
     // Loop over process table looking for process to run.
-    // acquire(&proc_table_lock);
-    acquire(&rq.rq_lock);
+    acquire(&proc_table_lock);
+    acquire(&(rq.rq_lock));
     for(i = 0; i < NPROC; i++){
       p = &proc[i];
       if(p->state != RUNNABLE)
@@ -294,7 +298,7 @@ scheduler(void)
       c->curproc = 0;
       setupsegs(0);
     }
-    //release(&proc_table_lock);
+    release(&proc_table_lock);
     release(&rq.rq_lock);
   }
 }
@@ -324,7 +328,8 @@ schedule(void){
   c->curproc = next;
   setupsegs(next);
   next->state = RUNNING;
-  swtch(&prev->context, &next->context);
+  if(next != prev)
+    swtch(&prev->context, &next->context);
   // may some bugs???
 }
 
@@ -371,6 +376,7 @@ void
 forkret(void)
 {
   // Still holding proc_table_lock from scheduler.
+  release(&(cp->rq->rq_lock));
   release(&proc_table_lock);
 
   // Jump into assembly, never to return.
@@ -394,8 +400,13 @@ sleep(void *chan, struct spinlock *lk)
   // guaranteed that we won't miss any wakeup
   // (wakeup runs with proc_table_lock locked),
   // so it's okay to release lk.
-  if(lk != &proc_table_lock){
+  if(lk == &proc_table_lock){
+    acquire(&(cp->rq->rq_lock));
+  }else if(lk == &(cp->rq->rq_lock)){
     acquire(&proc_table_lock);
+  }else{
+    acquire(&proc_table_lock);
+    acquire(&(cp->rq->rq_lock));
     release(lk);
   }
 
@@ -409,8 +420,13 @@ sleep(void *chan, struct spinlock *lk)
   cp->chan = 0;
 
   // Reacquire original lock.
-  if(lk != &proc_table_lock){
+  if(lk == &proc_table_lock){
+    release(&(cp->rq->rq_lock));
+  }else if(lk == &(cp->rq->rq_lock)){
     release(&proc_table_lock);
+  }else{
+    release(&proc_table_lock);
+    release(&(cp->rq->rq_lock));
     acquire(lk);
   }
 }

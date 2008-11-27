@@ -26,11 +26,14 @@ void
 acquire(struct spinlock *lock)
 {
   // by jimmy:
-  return;
+  // return;
+  // cprintf("acquire lock: %s\n", lock->name);
 
   pushcli();
-  if(holding(lock))
+  if(holding(lock)){
+    cprintf("lock name: %s, ", lock->name);
     panic("acquire");
+  }
 
   // The xchg is atomic.
   // It also serializes, so that reads after acquire are not
@@ -51,7 +54,8 @@ void
 release(struct spinlock *lock)
 {
   //by jimmy:
-  return;
+  // return;
+  // cprintf("release lock: %s\n", lock->name);
 
   if(!holding(lock))
     panic("release");

@@ -25,7 +25,7 @@ forktest(void)
     if(pid == 0)
       exit();
   }
-  
+
   if(n == 1000){
     printf(1, "fork claimed to work 1000 times!\n");
     exit();

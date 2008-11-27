@@ -3,6 +3,8 @@
 #include "param.h"
 #include "mmu.h"
 #include "proc.h"
+#include "spinlock.h"
+#include "sched.h"
 #include "x86.h"
 
 static void bootothers(void);
@@ -34,6 +36,7 @@ main(void)
   ide_init();      // disk
   if(!ismp)
     timer_init();  // uniprocessor timer
+  init_rq_simple(&rq);
   userinit();      // first user process
   bootothers();    // start other processors
 

@@ -12,7 +12,7 @@ sys_fork(void)
   int pid;
   struct proc *np;
 
-  cprintf("in sysfork\n");
+  cprintf("in sysfork: %s\n", cp->name);
   if((np = copyproc(cp)) == 0){
     cprintf("sysfork failed here\n");
     return -1;
