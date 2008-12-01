@@ -1,4 +1,9 @@
 // Mutual exclusion lock.
+#define _check_lock(lock, massage) do{\
+  if(!holding(lock))	\
+    panic(massage);\
+}while(0)\
+
 struct spinlock {
   uint locked;   // Is the lock held?
   

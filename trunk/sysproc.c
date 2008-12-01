@@ -12,14 +12,18 @@ sys_fork(void)
   int pid;
   struct proc *np;
 
-  cprintf("in sysfork: %s\n", cp->name);
+  //cprintf("in sysfork: %s\n", cp->name);
   if((np = copyproc(cp)) == 0){
     cprintf("sysfork failed here\n");
     return -1;
   }
+  acquire(&proc_table_lock);
+  acquire(&(np->rq->rq_lock));
   pid = np->pid;
   np->state = RUNNABLE;
   np->sched_class->enqueue_proc(np->rq, np);
+  release(&(np->rq->rq_lock));
+  release(&proc_table_lock);
   return pid;
 }
 
@@ -49,6 +53,7 @@ sys_kill(void)
 int
 sys_getpid(void)
 {
+//  cprintf("sys_getpid: [%s]\n", cp->name);
   return cp->pid;
 }
 

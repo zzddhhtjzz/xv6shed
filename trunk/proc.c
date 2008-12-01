@@ -7,6 +7,18 @@
 #include "spinlock.h"
 #include "sched.h"
 
+
+#define _check_curproc(a) do{	\
+}while(0)\
+
+/*
+#define _check_curproc(a) do{	\
+  if(cp == 0){		\
+    cprintf("%d, cp == 0\n", a);	\
+    panic("");\
+  }\
+}while(0)\
+*/
 struct spinlock proc_table_lock;
 
 struct proc proc[NPROC];
@@ -23,7 +35,6 @@ void
 pinit(void)
 {
   initlock(&proc_table_lock, "proc_table");
-  init_rq_simple(&rq);
 }
 
 // Look in the process table for an UNUSED proc.
@@ -181,14 +192,43 @@ allocidle(int cpuid){
 }
 */
 
+struct proc*
+allocIdle(void){
+  extern uchar _binary_idlecode_start[], _binary_idlecode_size[];
+
+  // init idle proc
+  struct proc* p = copyproc(0);
+  p->sz = PAGE;
+  p->mem = kalloc(p->sz);
+  p->cwd = namei("/");
+  memset(p->tf, 0, sizeof(*p->tf));
+  p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
+  p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
+  p->tf->es = p->tf->ds;
+  p->tf->ss = p->tf->ds;
+  p->tf->eflags = FL_IF;
+  p->tf->esp = p->sz;
+  
+  // Make return address readable; needed for some gcc.
+  p->tf->esp -= 4;
+  *(uint*)(p->mem + p->tf->esp) = 0xefefefef;
+
+  // On entry to user space, start executing at beginning of initcode.S.
+  p->tf->eip = 0;
+  memmove(p->mem, _binary_idlecode_start, (int)_binary_idlecode_size);
+    safestrcpy(p->name, "idle", sizeof(p->name));
+  p->state = RUNNABLE;
+
+  return p;
+}
+
 // Set up first user process.
 void
 userinit(void)
 {
   struct proc *p;
   extern uchar _binary_initcode_start[], _binary_initcode_size[];
-  extern uchar _binary_idlecode_start[], _binary_idlecode_size[];
-  //int i;
+  int i;
 
   p = copyproc(0);
   p->sz = PAGE;
@@ -211,34 +251,21 @@ userinit(void)
   memmove(p->mem, _binary_initcode_start, (int)_binary_initcode_size);
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->state = RUNNABLE;
+  acquire(&proc_table_lock);
+  acquire(&(rq.rq_lock));
   p->sched_class->enqueue_proc(p->rq, p);
-  
+  release(&(rq.rq_lock));
+  release(&proc_table_lock);
+
   initproc = p;
 
-  // init idle proc
-  p = copyproc(0);
-  p->sz = PAGE;
-  p->mem = kalloc(p->sz);
-  p->cwd = namei("/");
-  memset(p->tf, 0, sizeof(*p->tf));
-  p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
-  p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
-  p->tf->es = p->tf->ds;
-  p->tf->ss = p->tf->ds;
-  p->tf->eflags = FL_IF;
-  p->tf->esp = p->sz;
-  
-  // Make return address readable; needed for some gcc.
-  p->tf->esp -= 4;
-  *(uint*)(p->mem + p->tf->esp) = 0xefefefef;
-
-  // On entry to user space, start executing at beginning of initcode.S.
-  p->tf->eip = 0;
-  memmove(p->mem, _binary_idlecode_start, (int)_binary_idlecode_size);
+  for(i=0; i<NCPU; i++){
+    p = idleproc[i] = allocIdle();
     safestrcpy(p->name, "idle", sizeof(p->name));
-  p->state = RUNNABLE;
-  idleproc[0] = p;
-  cprintf("idleproc done!\n");
+    p->name[4] = (char)(i+'0');
+    p->name[5] = '\0';
+    //p->sched_class->enqueue_proc(p->rq, p);
+  }
 
   return;
 }
@@ -264,43 +291,26 @@ curproc(void)
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
 void
-scheduler(void)
+runIdle(void)
 {
   struct proc *p;
   struct cpu *c;
-  int i;
 
   c = &cpus[cpu()];
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
+  p = idleproc[cpu()];
 
-    // Loop over process table looking for process to run.
-    acquire(&proc_table_lock);
-    acquire(&(rq.rq_lock));
-    for(i = 0; i < NPROC; i++){
-      p = &proc[i];
-      if(p->state != RUNNABLE)
-        continue;
+  cprintf("begin run first proc in cpu[%d]\n", cpu());//debug
 
-      // Switch to chosen process.  It is the process's job
-      // to release proc_table_lock and then reacquire it
-      // before jumping back to us.
-      c->curproc = p;
-      setupsegs(p);
-      p->state = RUNNING;
+  sti();
+  acquire(&proc_table_lock);
+  acquire(&(rq.rq_lock));
+  c->curproc = p;
+  _check_curproc(2);
+  setupsegs(p);
+  p->state = RUNNING;
 
-      // by jimmy:
-      swtch(&c->context, &p->context);
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->curproc = 0;
-      setupsegs(0);
-    }
-    release(&proc_table_lock);
-    release(&rq.rq_lock);
-  }
+  // by jimmy:
+  swtch(&c->context, &p->context);
 }
 
 
@@ -326,6 +336,7 @@ schedule(void){
 
   // swtch
   c->curproc = next;
+  _check_curproc(1);//debug
   setupsegs(next);
   next->state = RUNNING;
   if(next != prev)
@@ -449,14 +460,17 @@ wakeup1(void *chan)
 void
 wakeup(void *chan)
 {
+  // debug
+  _check_curproc(3);
+
   // by jimmy: lock the rq
   acquire(&proc_table_lock);
-  acquire(&(cp->rq->rq_lock));
+  acquire(&(rq.rq_lock));
 
   wakeup1(chan);
 
   // by jimmy: unlock rq
-  release(&(cp->rq->rq_lock));
+  release(&(rq.rq_lock));
   release(&proc_table_lock);
 }
 

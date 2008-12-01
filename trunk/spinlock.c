@@ -55,10 +55,10 @@ release(struct spinlock *lock)
 {
   //by jimmy:
   // return;
-  // cprintf("release lock: %s\n", lock->name);
 
-  if(!holding(lock))
+  if(!holding(lock)){
     panic("release");
+  }
 
   lock->pcs[0] = 0;
   lock->cpu = 0xffffffff;

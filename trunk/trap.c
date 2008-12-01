@@ -66,6 +66,7 @@ trap(struct trapframe *tf)
     lapic_eoi();
     break;
   case IRQ_OFFSET + IRQ_IDE:
+    //cprintf("cpu[%d]: IRQ_IDE\n", cpu());//debug
     ide_intr();
     lapic_eoi();
     break;
@@ -82,8 +83,8 @@ trap(struct trapframe *tf)
   default:
     if(cp == 0 || (tf->cs&3) == 0){
       // In kernel, it must be our mistake.
-      cprintf("unexpected trap %d from cpu %d eip %x\n",
-              tf->trapno, cpu(), tf->eip);
+      cprintf("unexpected trap %d from cpu %d eip %x, cp = [%s]\n",
+              tf->trapno, cpu(), tf->eip, cp->name);
       panic("trap");
     }
     // In user space, assume process misbehaved.
