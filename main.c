@@ -9,7 +9,6 @@
 
 static void bootothers(void);
 static void mpmain(void) __attribute__((noreturn));
-extern void forkret1(struct trapframe*);
 
 // Bootstrap processor starts running C code here.
 int
@@ -59,12 +58,12 @@ mpmain(void)
   cprintf("cpu%d: scheduling\n", cpu());
 
   // by jimmy:
-  if(initproc)
-    cprintf("initproc->tf = %x\n", initproc->tf);
+  //if(initproc)
+  //  cprintf("initproc->tf = %x\n", initproc->tf);
   //forkret1(initproc->tf);
 
   //initproc->state = RUNNABLE;
-  scheduler();
+  runIdle();
 }
 
 static void

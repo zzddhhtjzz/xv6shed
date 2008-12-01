@@ -98,7 +98,7 @@ int             growproc(int);
 int             kill(int);
 void            pinit(void);
 void            procdump(void);
-void            scheduler(void) __attribute__((noreturn));
+void            runIdle(void) __attribute__((noreturn));
 void            setupsegs(struct proc*);
 void            sleep(void*, struct spinlock*);
 void            userinit(void);

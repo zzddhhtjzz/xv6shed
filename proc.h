@@ -69,6 +69,7 @@ extern struct cpu cpus[NCPU];
 extern int ncpu;
 extern struct proc *initproc;
 extern struct rq rq;
+extern struct spinlock proc_table_lock;
 
 // "cp" is a short alias for curproc().
 // It gets used enough to make this worthwhile.

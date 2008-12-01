@@ -148,4 +148,5 @@ bochs : fs.img xv6.img
 
 qemu: fs.img xv6.img
 	qemu -parallel stdio -hdb fs.img xv6.img
+#	qemu -smp 4 -m 10 -hda fs.img -hdb xv6.img 
 

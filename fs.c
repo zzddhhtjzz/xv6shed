@@ -573,6 +573,7 @@ skipelem(char *path, char *name)
 static struct inode*
 _namei(char *path, int parent, char *name)
 {
+  //cprintf("cpu[%d] namei #0\n", cpu());
   struct inode *ip, *next;
 
   if(*path == '/')
@@ -580,6 +581,7 @@ _namei(char *path, int parent, char *name)
   else
     ip = idup(cp->cwd);
 
+  //cprintf("cpu[%d] namei #1\n", cpu());
   while((path = skipelem(path, name)) != 0){
     ilock(ip);
     if(ip->type != T_DIR){
@@ -598,6 +600,7 @@ _namei(char *path, int parent, char *name)
     iunlockput(ip);
     ip = next;
   }
+  //cprintf("cpu[%d] namei #2\n", cpu());
   if(parent){
     iput(ip);
     return 0;

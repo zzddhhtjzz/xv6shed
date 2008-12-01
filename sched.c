@@ -10,6 +10,8 @@
 #include "spinlock.h"
 #include "sched.h"
 
+static char* rq_lock_name;
+
 // by jimmy:
 void init_rq_simple(struct rq* rq){
   int i;
@@ -17,19 +19,26 @@ void init_rq_simple(struct rq* rq){
   // mark all the nodes is free
   for(i=0; i<NPROC; i++){
     rq->nodes[i].proc = 0;
-    rq->nodes[i].next = &(rq->nodes[i]) + sizeof(struct rq_node);
+    rq->nodes[i].next = &(rq->nodes[i]) + 1;
     rq->nodes[i].prev = 0;
+    // debug
+    //cprintf("rq[%d] = %x\n", i, &(rq->nodes[i]));
   }
   rq->nodes[NPROC-1].next = 0;
   rq->free_list = &(rq->nodes[0]);
   rq->next_to_run = 0;
 
   // init lock
-  initlock(&(rq->rq_lock), "rq_lock");
+  initlock(&(rq->rq_lock), rq_lock_name);
 }
 
 void enqueue_proc_simple(struct rq *rq, struct proc *p){
-  //cprintf("in enqueue: %x\n", p->pid);
+  //cprintf("in enqueue: %x, free_list = %x\n", p->pid, rq->free_list);
+  //_check_lock(&(rq->rq_lock), "enqueue_proc_simple no lock");
+  if(p->rq != rq)
+    panic("rq changed!\n");
+  if(!holding(&(rq->rq_lock)))
+    panic("enqueue_proc_simple no lock");
 
   // alloc
   if(rq->free_list == 0)
@@ -55,18 +64,17 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
   // by jimmy:
   extern struct proc* idleproc[];//debug
   //cprintf("in dequeue: %x\n", p->pid);
+  _check_lock(&(rq->rq_lock), "dequeue_proc_simple no lock");
 
   // search
   struct rq_node* cnode;
-  if(p->pid == 3)
-    cprintf("");
   if(rq->next_to_run->proc == p)
     cnode = rq->next_to_run;
   else{
     cnode = rq->next_to_run->prev;
     while(cnode->proc != p){
       if(cnode == rq->next_to_run){
-	if(p == idleproc[0])
+	if(p == idleproc[cpu()])
           return;
 	cprintf("proc: %s, state = %d\n", p->name, p->state);
         panic("Kernel panic: Cannot find proc in dequeue_proc_simple\n");
@@ -93,24 +101,26 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
 }
 
 void yield_proc_simple(struct rq *rq){
+  _check_lock(&(rq->rq_lock), "yield_proc_simple no lock");
   if(rq->next_to_run)
     rq->next_to_run = rq->next_to_run->next;
 }
 
 struct proc* pick_next_proc_simple(struct rq *rq){
   extern struct proc* idleproc[];//debug
+  _check_lock(&(rq->rq_lock), "pick_next_proc_simple no lock");
   if(rq->next_to_run)
     return rq->next_to_run->proc;
   else
-    return idleproc[0];
+    return idleproc[cpu()];
 }
 
 void proc_tick_simple(struct rq* rq, struct proc* p){
+  _check_lock(&(rq->rq_lock), "proc_tick_simple no lock");
   yield();
 }
 
 const struct sched_class simple_sched_class = {
-  .init_rq		= init_rq_simple,
   .enqueue_proc		= enqueue_proc_simple,
   .dequeue_proc		= dequeue_proc_simple,
   .yield_proc		= yield_proc_simple,
