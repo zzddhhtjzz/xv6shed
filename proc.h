@@ -45,6 +45,9 @@ struct proc {
   // by jimmy:
   struct rq* rq;
   struct sched_class* sched_class;
+
+  // by cxyzs7
+  int timeslice;
 };
 
 // Process memory is laid out contiguously, low addresses first:

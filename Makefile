@@ -18,6 +18,8 @@ OBJS = \
 	string.o\
 	swtch.o\
 	sched.o\
+	sched_fifo.o\
+	sched_RR.o\
 	syscall.o\
 	sysfile.o\
 	sysproc.o\
