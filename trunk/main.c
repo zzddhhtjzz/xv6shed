@@ -36,6 +36,8 @@ main(void)
   if(!ismp)
     timer_init();  // uniprocessor timer
   init_rq_simple(&rq);
+//  init_rq_fifo(&rq);
+//  init_rq_RR(&rq);
   userinit();      // first user process
   bootothers();    // start other processors
 

@@ -6,6 +6,8 @@
 #include "proc.h"
 #include "spinlock.h"
 #include "sched.h"
+#include "sched_fifo.h"
+#include "sched_RR.h"
 
 
 #define _check_curproc(a) do{	\
@@ -52,9 +54,10 @@ allocproc(void)
     if(p->state == UNUSED){
       p->state = EMBRYO;
       // by jimmy: currently there is only 1 rq and 1 sched_class, so:
-      p->sched_class = &simple_sched_class;
+      p->sched_class = (struct sched_class*)&simple_sched_class;
       p->rq = &rq;
       p->pid = nextpid++;
+      p->timeslice = INIT_SLICE;
       release(&proc_table_lock);
       return p;
     }
@@ -323,14 +326,16 @@ void
 schedule(void){
   struct cpu *c;
   struct proc* next, *prev;
+//  cprintf("Schedule\n");
   c = &cpus[cpu()];
   prev = cp;
 
   //if(cp is not running)
   //   remove it from the queue
   if((prev->state != RUNNABLE) && (prev->state != RUNNING))
+  {
     prev->sched_class->dequeue_proc(prev->rq, prev);
-  
+  }
   // get next proc to run 
   next = prev->sched_class->pick_next_proc(prev->rq);
 
@@ -340,7 +345,9 @@ schedule(void){
   setupsegs(next);
   next->state = RUNNING;
   if(next != prev)
+  {
     swtch(&prev->context, &next->context);
+  }
   // may some bugs???
 }
 

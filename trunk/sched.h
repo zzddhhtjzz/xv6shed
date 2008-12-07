@@ -3,6 +3,8 @@
 #ifndef __SCHED_H
 #define __SCHED_H
 
+#define NULL 0
+
 void init_rq_simple(struct rq*);
 
 struct sched_class{
@@ -27,12 +29,14 @@ struct rq_node{
   struct rq_node* prev;	
 };
 
+// NEED TO BE MODIFIED for more general cases
 struct rq{
   struct spinlock rq_lock;
   struct rq_node nodes[NPROC];  // rq_node table
   
   struct rq_node* next_to_run;	// next proc to run
+  struct rq_node* last_to_run;  // last proc to run
   struct rq_node* free_list;	// all the free proc
 };
-
 #endif
+
