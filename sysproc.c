@@ -18,11 +18,11 @@ sys_fork(void)
     return -1;
   }
   acquire(&proc_table_lock);
-  acquire(&(np->rq->rq_lock));
+  acquire(&(cpus[cpu()].rq->rq_lock));
   pid = np->pid;
   np->state = RUNNABLE;
-  np->sched_class->enqueue_proc(np->rq, np);
-  release(&(np->rq->rq_lock));
+  enqueue_proc(cpus[cpu()].rq, np);
+  release(&(cpus[cpu()].rq->rq_lock));
   release(&proc_table_lock);
   return pid;
 }

@@ -23,7 +23,7 @@ exec(char *path, char **argv)
   //acquire(&(cp->rq->rq_lock));
 
   //debug
-  //cprintf("exec: cpu%d, [%s]\n", cpu(), cp->name);
+//  cprintf("exec: cpu%d, [%s]\n", cpu(), cp->name);
 
   char *mem, *s, *last;
   int i, argc, arglen, len, off;
@@ -32,10 +32,10 @@ exec(char *path, char **argv)
   struct inode *ip;
   struct proghdr ph;
 
-  //cprintf("#0\n", cp->name);
+//  cprintf("#0\n", cp->name);
   if((ip = namei(path)) == 0)
     return -1;
-  //cprintf("#0.5\n", cp->name);
+//  cprintf("#0.5\n", cp->name);
   ilock(ip);
 
   // Compute memory size of new process.
@@ -43,7 +43,7 @@ exec(char *path, char **argv)
   sz = 0;
 
   // Program segments.
-  //cprintf("#1\n", cp->name);
+//  cprintf("#1\n", cp->name);
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) < sizeof(elf))
     goto bad;
   if(elf.magic != ELF_MAGIC)
@@ -59,7 +59,7 @@ exec(char *path, char **argv)
   }
   
   // Arguments.
-  //cprintf("#2\n", cp->name);
+//  cprintf("#2\n", cp->name);
   arglen = 0;
   for(argc=0; argv[argc]; argc++)
     arglen += strlen(argv[argc]) + 1;
@@ -70,7 +70,7 @@ exec(char *path, char **argv)
   sz += PAGE;
   
   // Allocate program memory.
-  //cprintf("#3\n", cp->name);
+//  cprintf("#3\n", cp->name);
   sz = (sz+PAGE-1) & ~(PAGE-1);
   mem = kalloc(sz);
   if(mem == 0)
@@ -78,7 +78,7 @@ exec(char *path, char **argv)
   memset(mem, 0, sz);
 
   // Load program into memory.
-  //cprintf("#4\n", cp->name);
+//  cprintf("#4\n", cp->name);
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;
@@ -97,7 +97,7 @@ exec(char *path, char **argv)
   argp = sz - arglen - 4*(argc+1);
 
   // Copy argv strings and pointers to stack.
-  //cprintf("#5\n", cp->name);
+//  cprintf("#5\n", cp->name);
   *(uint*)(mem+argp + 4*argc) = 0;  // argv[argc]
   for(i=argc-1; i>=0; i--){
     len = strlen(argv[i]) + 1;
@@ -132,7 +132,7 @@ exec(char *path, char **argv)
   setupsegs(cp);
 
   //debug
-  //cprintf("exec end: [%s]\n", cp->name);
+//  cprintf("exec end: [%s]\n", cp->name);
 
   //_check_curproc(2);
   //release(&(cp->rq->rq_lock));

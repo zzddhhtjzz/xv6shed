@@ -7,6 +7,9 @@
 #include "traps.h"
 #include "spinlock.h"
 #include "syscall.h"
+#include "rq.h"
+
+//#define LOAD_BALANCE_ON
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
@@ -101,6 +104,13 @@ trap(struct trapframe *tf)
 
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
-  if(cp && cp->state == RUNNING && tf->trapno == IRQ_OFFSET+IRQ_TIMER)
-    yield();
+  if(cp && cp->state == RUNNING && tf->trapno == IRQ_OFFSET+IRQ_TIMER){
+#ifdef LOAD_BALANCE_ON
+    if(cp == idleproc[cpu()]){
+      struct rq* rq = cpus[cpu()].rq;
+      rq->sched_class->load_balance(rq);
+    }
+#endif
+    proc_tick(cpus[cpu()].rq, cp);
+  }
 }

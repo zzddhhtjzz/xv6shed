@@ -14,6 +14,7 @@ OBJS = \
 	picirq.o\
 	pipe.o\
 	proc.o\
+        rq.o\
 	spinlock.o\
 	string.o\
 	swtch.o\
@@ -115,6 +116,7 @@ UPROGS=\
 	_kill\
 	_ln\
 	_ls\
+	_matmul16\
 	_mkdir\
 	_rm\
 	_sh\
