@@ -7,31 +7,15 @@
 #include "spinlock.h"
 #include "sched_RR.h"
 
-static char* rq_lock_name;
-
 void init_rq_RR(struct rq* rq){
   int i;
 
-  for(i = 0; i < NPROC; i++){
-    rq->nodes[i].proc = NULL;
-    rq->nodes[i].next = &(rq->nodes[i+1]);
+  for(i=0; i<NPROC; i++){
+    rq->nodes[i].prev = NULL;
   }
-  rq->nodes[NPROC-1].next = NULL;
-  rq->free_list = &(rq->nodes[0]);
-  rq->next_to_run = NULL;
-
-  // init lock
-  initlock(&(rq->rq_lock), rq_lock_name);
 }
 
 void enqueue_proc_RR(struct rq *rq, struct proc *p){
-//  cprintf("Enqueue: %x, free_list = %x\n", p->pid, rq->free_list);
-  if(!holding(&(rq->rq_lock)))
-    panic("enqueue_proc_RR no lock");
-
-  // alloc
-  if(rq->free_list == NULL)
-    panic("kernel panic: Do not support procs more than NPROC!(in enqueue_proc_RR)\n");
   struct rq_node* pnode = rq->free_list;
   rq->free_list = pnode->next;
 
@@ -50,11 +34,6 @@ void enqueue_proc_RR(struct rq *rq, struct proc *p){
 }
 
 void dequeue_proc_RR(struct rq *rq, struct proc *p){
-  extern struct proc* idleproc[];
-  _check_lock(&(rq->rq_lock), "dequeue_proc_RR no lock");
-
-  if(p == idleproc[cpu()])
-    return;
   struct rq_node* node = rq->next_to_run;
   while (node != rq->next_to_run->prev && node->proc != p)
   {
@@ -79,33 +58,36 @@ void dequeue_proc_RR(struct rq *rq, struct proc *p){
 }
 
 void yield_proc_RR(struct rq *rq){
-  _check_lock(&(rq->rq_lock), "yield_proc_RR no lock");
-  if(rq->next_to_run)
-    rq->next_to_run = rq->next_to_run->next;
+  rq->next_to_run = rq->next_to_run->next;
 }
 
 struct proc* pick_next_proc_RR(struct rq *rq){
-  extern struct proc* idleproc[];
-  _check_lock(&(rq->rq_lock), "pick_next_proc_RR no lock");
-  if(rq->next_to_run)
-    return rq->next_to_run->proc;
-  else
-    return idleproc[cpu()];
+  struct rq_node* p_node = rq->next_to_run;
+  if (p_node == NULL)
+    return NULL;
+  else if (p_node->proc->state == RUNNABLE)
+    return p_node->proc;
+  p_node = p_node->next;
+  while (p_node != rq->next_to_run){
+    if (p_node->proc->state == RUNNABLE)
+      return p_node->proc;
+    p_node = p_node->next; 
+  }
+  return NULL;
 }
 
 void proc_tick_RR(struct rq* rq, struct proc* p){
-  _check_lock(&(rq->rq_lock), "proc_tick_RR no lock");
-  p->timeslice--;
+  //_check_lock(&(rq->rq_lock), "proc_tick_RR no lock");
+  p->timeslice--;	// may be some comflict here
   if (p->timeslice == 0)
   {
-    p->timeslice = INIT_SLICE;
-    dequeue_proc_RR(rq, p);
-    enqueue_proc_RR(rq, p);
+    p->timeslice = rq->max_slices;
+    yield();
   }
-  yield();
 }
 
 const struct sched_class sched_class_RR = {
+  .init_rq 		= init_rq_RR,
   .enqueue_proc		= enqueue_proc_RR,
   .dequeue_proc		= dequeue_proc_RR,
   .yield_proc		= yield_proc_RR,

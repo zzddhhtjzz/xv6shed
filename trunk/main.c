@@ -6,6 +6,7 @@
 #include "spinlock.h"
 #include "sched.h"
 #include "x86.h"
+#include "rq.h"
 
 static void bootothers(void);
 static void mpmain(void) __attribute__((noreturn));
@@ -35,9 +36,7 @@ main(void)
   ide_init();      // disk
   if(!ismp)
     timer_init();  // uniprocessor timer
-  init_rq_simple(&rq);
-//  init_rq_fifo(&rq);
-//  init_rq_RR(&rq);
+
   userinit();      // first user process
   bootothers();    // start other processors
 

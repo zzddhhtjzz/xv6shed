@@ -1,3 +1,6 @@
+#ifndef _PROC_H_
+#define _PROC_H_
+
 // Segments in proc->gdt
 #define SEG_KCODE 1  // kernel code
 #define SEG_KDATA 2  // kernel data+stack
@@ -42,10 +45,6 @@ struct proc {
   struct trapframe *tf;     // Trap frame for current interrupt
   char name[16];            // Process name (debugging)
 
-  // by jimmy:
-  struct rq* rq;
-  struct sched_class* sched_class;
-
   // by cxyzs7
   int timeslice;
 };
@@ -66,14 +65,48 @@ struct cpu {
   volatile uint booted;        // Has the CPU started?
   int ncli;                   // Depth of pushcli nesting.
   int intena;                 // Were interrupts enabled before pushcli? 
+  struct rq* rq;
 };
 
 extern struct cpu cpus[NCPU];
 extern int ncpu;
 extern struct proc *initproc;
-extern struct rq rq;
+extern struct proc *idleproc[];
 extern struct spinlock proc_table_lock;
+
+void proc_tick(struct rq* rq, struct proc* p);
+void enqueue_proc(struct rq *rq, struct proc *p);
+void dequeue_proc (struct rq *rq, struct proc *p);
+struct proc* pick_next_proc(struct rq *rq);
+
+struct sched_class{
+  // Init the run queue
+  void (*init_rq) (struct rq *rq);
+  // put the proc into runqueue
+  // this function must be called with rq_lock
+  void (*enqueue_proc) (struct rq *rq, struct proc *p);
+  // get the proc out runqueue
+  // this function must be called with rq_lock
+  void (*dequeue_proc) (struct rq *rq, struct proc *p);
+  //yield
+  // this function must be called with rq_lock
+  void (*yield_proc) (struct rq *rq);
+  // choose the next runnable task
+  struct proc* (*pick_next_proc) (struct rq *rq);
+  // dealer of the time-tick
+  // this function must be called WITHOUT rq_lock
+  void (*proc_tick)(struct rq* rq, struct proc* p);
+  // load_balance
+  // this function must be called WITHOUT rq_lock
+  void (*load_balance)(struct rq* rq);
+  // get some proc from this rq, used in load_balance
+  // the return value is the num of proc we get
+  // this function must be called with rq_lock
+  int (*get_proc)(struct rq* rq, struct proc* procs_moved[]);
+};
 
 // "cp" is a short alias for curproc().
 // It gets used enough to make this worthwhile.
 #define cp curproc()
+
+#endif

@@ -6,8 +6,7 @@
 #include "proc.h"
 #include "spinlock.h"
 #include "sched.h"
-
-static char* rq_lock_name;
+#include "rq.h"
 
 // by jimmy:
 void init_rq_simple(struct rq* rq){
@@ -15,31 +14,14 @@ void init_rq_simple(struct rq* rq){
 
   // mark all the nodes is free
   for(i=0; i<NPROC; i++){
-    rq->nodes[i].proc = 0;
-    rq->nodes[i].next = &(rq->nodes[i]) + 1;
-    rq->nodes[i].prev = 0;
-    // debug
-    //cprintf("rq[%d] = %x\n", i, &(rq->nodes[i]));
+    rq->nodes[i].prev = NULL;
   }
-  rq->nodes[NPROC-1].next = 0;
-  rq->free_list = &(rq->nodes[0]);
-  rq->next_to_run = 0;
-
-  // init lock
-  initlock(&(rq->rq_lock), rq_lock_name);
 }
 
 void enqueue_proc_simple(struct rq *rq, struct proc *p){
   //cprintf("in enqueue: %x, free_list = %x\n", p->pid, rq->free_list);
   //_check_lock(&(rq->rq_lock), "enqueue_proc_simple no lock");
-  if(p->rq != rq)
-    panic("rq changed!\n");
-  if(!holding(&(rq->rq_lock)))
-    panic("enqueue_proc_simple no lock");
-
-  // alloc
-  if(rq->free_list == 0)
-    panic("kernel panic: Do not support procs more than NPROC!(in enqueue_proc_simple)\n");
+  
   struct rq_node* pnode = rq->free_list;
   rq->free_list = pnode->next;
 
@@ -58,11 +40,6 @@ void enqueue_proc_simple(struct rq *rq, struct proc *p){
 }
 
 void dequeue_proc_simple(struct rq *rq, struct proc *p){
-  // by jimmy:
-  extern struct proc* idleproc[];//debug
-  //cprintf("in dequeue: %x\n", p->pid);
-  _check_lock(&(rq->rq_lock), "dequeue_proc_simple no lock");
-
   // search
   struct rq_node* cnode;
   if(rq->next_to_run->proc == p)
@@ -71,8 +48,6 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
     cnode = rq->next_to_run->prev;
     while(cnode->proc != p){
       if(cnode == rq->next_to_run){
-	if(p == idleproc[cpu()])
-          return;
 	cprintf("proc: %s, state = %d\n", p->name, p->state);
         panic("Kernel panic: Cannot find proc in dequeue_proc_simple\n");
       }
@@ -98,30 +73,95 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
 }
 
 void yield_proc_simple(struct rq *rq){
-  _check_lock(&(rq->rq_lock), "yield_proc_simple no lock");
   if(rq->next_to_run)
     rq->next_to_run = rq->next_to_run->next;
 }
 
 struct proc* pick_next_proc_simple(struct rq *rq){
-  extern struct proc* idleproc[];//debug
-  _check_lock(&(rq->rq_lock), "pick_next_proc_simple no lock");
-  if(rq->next_to_run)
-    return rq->next_to_run->proc;
-  else
-    return idleproc[cpu()];
+  struct rq_node* p_node = rq->next_to_run;
+  if (p_node == NULL)
+    return NULL;
+  else if (p_node->proc->state == RUNNABLE)
+    return p_node->proc;
+  p_node = p_node->next;
+  while (p_node != rq->next_to_run){
+    if (p_node->proc->state == RUNNABLE)
+      return p_node->proc;
+    p_node = p_node->next; 
+  }
+  return NULL;
 }
 
 void proc_tick_simple(struct rq* rq, struct proc* p){
-  _check_lock(&(rq->rq_lock), "proc_tick_simple no lock");
   yield();
+  return;
+}
+
+// by jimmy:
+void load_balance_simple(struct rq* rq){
+  int max = 0;
+  struct rq* src_rq = 0;
+  int i;
+  struct proc* procs_moved[NPROC/2];
+  int num_procs_moved;
+  
+  // find out the busiest rq
+  for(i=0; i<ncpu; i++){
+    if(rqs[i].proc_num > max){
+      src_rq = &(rqs[i]);
+      max = src_rq->proc_num;
+    }
+  }
+  if(src_rq == 0)
+    return;
+
+  // Get the proc from src_rq
+  acquire(&(src_rq->rq_lock));
+  num_procs_moved = src_rq->sched_class->get_proc(src_rq, procs_moved);
+  release(&(src_rq->rq_lock));
+  if(num_procs_moved != 0)
+    cprintf("Get some proc\n");
+  acquire(&(rq->rq_lock));
+  for(i=0; i<num_procs_moved; i++) {
+    rq->sched_class->enqueue_proc(rq, procs_moved[i]);
+  }
+  rq->proc_num += num_procs_moved;
+  release(&(rq->rq_lock));
+
+  return;
+}
+
+// by jimmy:
+int get_proc_simple(struct rq* rq, struct proc* procs_moved[]){
+  int num_procs_moved = rq->proc_num/2;
+  int i;
+  struct rq_node* prev, *next;
+
+  struct rq_node* cnode = rq->next_to_run->next;
+  for(i=0; i<num_procs_moved; i++){
+    if(cnode == rq->next_to_run)
+      panic("Not enough proc to move in get_proc_simple\n");
+    procs_moved[i] = cnode->proc;
+    prev = cnode->prev, next = cnode->next;
+    prev->next = next;
+    next->prev = prev;
+    cnode->next = rq->free_list;
+    rq->free_list = cnode;
+    cnode = next;
+  }
+  rq->proc_num -= num_procs_moved;
+
+  return num_procs_moved;
 }
 
 const struct sched_class simple_sched_class = {
+  .init_rq		= init_rq_simple,
   .enqueue_proc		= enqueue_proc_simple,
   .dequeue_proc		= dequeue_proc_simple,
   .yield_proc		= yield_proc_simple,
   .pick_next_proc	= pick_next_proc_simple,
   .proc_tick		= proc_tick_simple,
+  .load_balance		= load_balance_simple,
+  .get_proc		= get_proc_simple,
 };
 

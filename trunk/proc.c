@@ -8,7 +8,11 @@
 #include "sched.h"
 #include "sched_fifo.h"
 #include "sched_RR.h"
+#include "rq.h"
 
+static char* rq_lock_name = "rqlock";
+
+#define SCHED_FIFO
 
 #define _check_curproc(a) do{	\
 }while(0)\
@@ -27,16 +31,26 @@ struct proc proc[NPROC];
 struct proc *initproc;
 // by jimmy:
 struct proc* idleproc[NCPU];
-struct rq rq;
 
 int nextpid = 1;
 extern void forkret(void);
 extern void forkret1(struct trapframe*);
 
+void enqueue_proc (struct rq *rq, struct proc *p);
+void dequeue_proc (struct rq *rq, struct proc *p);
+void yield_proc (struct rq *rq);
+struct proc* pick_next_proc (struct rq *rq);
+void proc_tick (struct rq* rq, struct proc* p);
+
 void
 pinit(void)
 {
+  int i;
   initlock(&proc_table_lock, "proc_table");
+  for(i=0; i<NCPU; i++)
+    init_rq(&(rqs[i]));
+  for(i=0; i<NCPU; i++)
+    cpus[i].rq = &(rqs[i]);
 }
 
 // Look in the process table for an UNUSED proc.
@@ -54,10 +68,7 @@ allocproc(void)
     if(p->state == UNUSED){
       p->state = EMBRYO;
       // by jimmy: currently there is only 1 rq and 1 sched_class, so:
-      p->sched_class = (struct sched_class*)&simple_sched_class;
-      p->rq = &rq;
-      p->pid = nextpid++;
-      p->timeslice = INIT_SLICE;
+      p->pid = nextpid++;;
       release(&proc_table_lock);
       return p;
     }
@@ -255,9 +266,9 @@ userinit(void)
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->state = RUNNABLE;
   acquire(&proc_table_lock);
-  acquire(&(rq.rq_lock));
-  p->sched_class->enqueue_proc(p->rq, p);
-  release(&(rq.rq_lock));
+  acquire(&(cpus[cpu()].rq->rq_lock));
+  enqueue_proc(cpus[cpu()].rq, p);
+  release(&(cpus[cpu()].rq->rq_lock));
   release(&proc_table_lock);
 
   initproc = p;
@@ -266,8 +277,7 @@ userinit(void)
     p = idleproc[i] = allocIdle();
     safestrcpy(p->name, "idle", sizeof(p->name));
     p->name[4] = (char)(i+'0');
-    p->name[5] = '\0';
-    //p->sched_class->enqueue_proc(p->rq, p);
+    p->name[5] = '\0';\
   }
 
   return;
@@ -306,7 +316,7 @@ runIdle(void)
 
   sti();
   acquire(&proc_table_lock);
-  acquire(&(rq.rq_lock));
+  acquire(&(cpus[cpu()].rq->rq_lock));
   c->curproc = p;
   _check_curproc(2);
   setupsegs(p);
@@ -334,10 +344,10 @@ schedule(void){
   //   remove it from the queue
   if((prev->state != RUNNABLE) && (prev->state != RUNNING))
   {
-    prev->sched_class->dequeue_proc(prev->rq, prev);
+    dequeue_proc(cpus[cpu()].rq, prev);
   }
   // get next proc to run 
-  next = prev->sched_class->pick_next_proc(prev->rq);
+  next = pick_next_proc(cpus[cpu()].rq);
 
   // swtch
   c->curproc = next;
@@ -375,16 +385,16 @@ yield(void)
 {
   //lock the rq
   acquire(&proc_table_lock);
-  acquire(&(cp->rq->rq_lock));
+  acquire(&(cpus[cpu()].rq->rq_lock));
   cp->state = RUNNABLE;
 
   //sched();
   // by jimmy:
-  cp->sched_class->yield_proc(cp->rq);
+  yield_proc(cpus[cpu()].rq);
   schedule();
 
   // unlock rq
-  release(&(cp->rq->rq_lock));
+  release(&(cpus[cpu()].rq->rq_lock));
   release(&proc_table_lock);
 }
 
@@ -394,7 +404,7 @@ void
 forkret(void)
 {
   // Still holding proc_table_lock from scheduler.
-  release(&(cp->rq->rq_lock));
+  release(&(cpus[cpu()].rq->rq_lock));
   release(&proc_table_lock);
 
   // Jump into assembly, never to return.
@@ -419,12 +429,12 @@ sleep(void *chan, struct spinlock *lk)
   // (wakeup runs with proc_table_lock locked),
   // so it's okay to release lk.
   if(lk == &proc_table_lock){
-    acquire(&(cp->rq->rq_lock));
-  }else if(lk == &(cp->rq->rq_lock)){
+    acquire(&(cpus[cpu()].rq->rq_lock));
+  }else if(lk == &(cpus[cpu()].rq->rq_lock)){
     acquire(&proc_table_lock);
   }else{
     acquire(&proc_table_lock);
-    acquire(&(cp->rq->rq_lock));
+    acquire(&(cpus[cpu()].rq->rq_lock));
     release(lk);
   }
 
@@ -439,12 +449,12 @@ sleep(void *chan, struct spinlock *lk)
 
   // Reacquire original lock.
   if(lk == &proc_table_lock){
-    release(&(cp->rq->rq_lock));
-  }else if(lk == &(cp->rq->rq_lock)){
+    release(&(cpus[cpu()].rq->rq_lock));
+  }else if(lk == &(cpus[cpu()].rq->rq_lock)){
     release(&proc_table_lock);
   }else{
     release(&proc_table_lock);
-    release(&(cp->rq->rq_lock));
+    release(&(cpus[cpu()].rq->rq_lock));
     acquire(lk);
   }
 }
@@ -459,7 +469,7 @@ wakeup1(void *chan)
   for(p = proc; p < &proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan){
       p->state = RUNNABLE;
-      p->sched_class->enqueue_proc(p->rq, p);
+      enqueue_proc(cpus[cpu()].rq, p);
     }
 }
 
@@ -472,12 +482,12 @@ wakeup(void *chan)
 
   // by jimmy: lock the rq
   acquire(&proc_table_lock);
-  acquire(&(rq.rq_lock));
+  acquire(&(cpus[cpu()].rq->rq_lock));
 
   wakeup1(chan);
 
   // by jimmy: unlock rq
-  release(&(rq.rq_lock));
+  release(&(cpus[cpu()].rq->rq_lock));
   release(&proc_table_lock);
 }
 
@@ -496,7 +506,7 @@ kill(int pid)
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING){
         p->state = RUNNABLE;
-        p->sched_class->enqueue_proc(p->rq, p);
+        enqueue_proc(cpus[cpu()].rq, p);
       }
       release(&proc_table_lock);
       return 0;
@@ -530,7 +540,7 @@ exit(void)
   cp->cwd = 0;
 
   // lock rq
-  acquire(&(cp->rq->rq_lock));
+  acquire(&(cpus[cpu()].rq->rq_lock));
   acquire(&proc_table_lock);
 
   // Parent might be sleeping in wait().
@@ -614,7 +624,19 @@ procdump(void)
   struct proc *p;
   char *state;
   uint pc[10];
-  
+
+  acquire(&proc_table_lock);
+  cprintf("************************\n"); 
+  for(i=0; i<ncpu; i++){
+    p = cpus[i].curproc;
+    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
+      state = states[p->state];
+    else
+      state = "???";
+    cprintf("On cpu %d, nproc=%d : pid %d, %s, %d\n", 
+	i, cpus[i].rq->proc_num, p->pid, state);
+  }
+ 
   for(i = 0; i < NPROC; i++){
     p = &proc[i];
     if(p->state == UNUSED)
@@ -631,5 +653,82 @@ procdump(void)
     }
     cprintf("\n");
   }
+  cprintf("************************\n");
+  release(&proc_table_lock); 
 }
 
+void init_rq(struct rq* rq)
+{
+  int i;
+
+  // mark all the nodes is free
+  for(i=0; i<NPROC; i++){
+    rq->nodes[i].proc = NULL;
+    rq->nodes[i].next = &(rq->nodes[i]) + 1;
+  }
+  rq->nodes[NPROC-1].next = 0;
+  rq->free_list = &(rq->nodes[0]);
+  rq->next_to_run = NULL;
+#ifdef SCHED_SIMPLE
+  rq->sched_class = (struct sched_class *)&simple_sched_class;
+#endif
+#ifdef SCHED_FIFO
+  rq->sched_class = (struct sched_class *)&sched_class_fifo;
+#endif
+#ifdef SCHED_RR
+  rq->sched_class = (struct sched_class *)&sched_class_RR;
+#endif
+  rq->sched_class->init_rq(rq);
+  rq->proc_num = 0;
+
+  // init lock
+  initlock(&(rq->rq_lock), rq_lock_name);
+}
+
+void enqueue_proc(struct rq *rq, struct proc *p)
+{
+  if(!holding(&(rq->rq_lock)))
+    panic("enqueue_proc no lock");
+
+  // alloc
+  if(rq->free_list == 0)
+    panic("kernel panic: Do not support procs more than NPROC!(in enqueue_proc_simple)\n");
+
+  (rq->proc_num)++;
+  rq->sched_class->enqueue_proc(rq, p);
+}
+
+void dequeue_proc (struct rq *rq, struct proc *p)
+{
+  if(!holding(&(rq->rq_lock)))
+    panic("dequeue_proc no lock");
+
+  if(p == idleproc[cpu()])
+    return;
+  rq->sched_class->dequeue_proc(rq, p);
+
+  (rq->proc_num)--;
+}
+
+void yield_proc (struct rq *rq)
+{
+  if(!holding(&(rq->rq_lock)))
+    panic("yield no lock");
+  rq->sched_class->yield_proc(rq);
+}
+
+struct proc* pick_next_proc(struct rq *rq)
+{
+  if(!holding(&(rq->rq_lock)))
+    panic("pick_next_proc no lock");
+  struct proc* p = rq->sched_class->pick_next_proc(rq);
+  if (p)
+    return p;
+  else
+    return idleproc[cpu()];
+}
+
+void proc_tick(struct rq* rq, struct proc* p)
+{
+  rq->sched_class->proc_tick(cpus[cpu()].rq, cp);
+}
