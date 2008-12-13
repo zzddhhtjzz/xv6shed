@@ -19,7 +19,9 @@ void enqueue_proc_RR(struct rq *rq, struct proc *p){
   struct rq_node* pnode = rq->free_list;
   rq->free_list = pnode->next;
 
-  // insert before next_to_run
+  if (p->rq != rq)
+    p->timeslice = rq->max_slices;
+
   pnode->proc = p;
 
   if (rq->next_to_run == NULL){
@@ -58,7 +60,8 @@ void dequeue_proc_RR(struct rq *rq, struct proc *p){
 }
 
 void yield_proc_RR(struct rq *rq){
-  rq->next_to_run = rq->next_to_run->next;
+  if(rq->next_to_run)
+    rq->next_to_run = rq->next_to_run->next;
 }
 
 struct proc* pick_next_proc_RR(struct rq *rq){
@@ -78,7 +81,9 @@ struct proc* pick_next_proc_RR(struct rq *rq){
 
 void proc_tick_RR(struct rq* rq, struct proc* p){
   //_check_lock(&(rq->rq_lock), "proc_tick_RR no lock");
-  p->timeslice--;	// may be some comflict here
+  if(p == idleproc[cpu()])
+    yield();
+  p->timeslice--;	// may be some conflict here
   if (p->timeslice == 0)
   {
     p->timeslice = rq->max_slices;

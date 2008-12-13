@@ -12,7 +12,7 @@
 
 static char* rq_lock_name = "rqlock";
 
-#define SCHED_FIFO
+#define SCHED_RR
 
 #define _check_curproc(a) do{	\
 }while(0)\
@@ -36,6 +36,7 @@ int nextpid = 1;
 extern void forkret(void);
 extern void forkret1(struct trapframe*);
 
+void init_rq(struct rq* rq);
 void enqueue_proc (struct rq *rq, struct proc *p);
 void dequeue_proc (struct rq *rq, struct proc *p);
 void yield_proc (struct rq *rq);
@@ -68,7 +69,8 @@ allocproc(void)
     if(p->state == UNUSED){
       p->state = EMBRYO;
       // by jimmy: currently there is only 1 rq and 1 sched_class, so:
-      p->pid = nextpid++;;
+      p->pid = nextpid++;
+      p->rq = NULL;
       release(&proc_table_lock);
       return p;
     }
@@ -336,7 +338,6 @@ void
 schedule(void){
   struct cpu *c;
   struct proc* next, *prev;
-//  cprintf("Schedule\n");
   c = &cpus[cpu()];
   prev = cp;
 
@@ -677,6 +678,7 @@ void init_rq(struct rq* rq)
 #endif
 #ifdef SCHED_RR
   rq->sched_class = (struct sched_class *)&sched_class_RR;
+  rq->max_slices = 10;
 #endif
   rq->sched_class->init_rq(rq);
   rq->proc_num = 0;
@@ -696,6 +698,7 @@ void enqueue_proc(struct rq *rq, struct proc *p)
 
   (rq->proc_num)++;
   rq->sched_class->enqueue_proc(rq, p);
+  p->rq = rq;
 }
 
 void dequeue_proc (struct rq *rq, struct proc *p)
