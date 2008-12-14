@@ -267,11 +267,9 @@ userinit(void)
   memmove(p->mem, _binary_initcode_start, (int)_binary_initcode_size);
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->state = RUNNABLE;
-  acquire(&proc_table_lock);
   acquire(&(cpus[cpu()].rq->rq_lock));
   enqueue_proc(cpus[cpu()].rq, p);
   release(&(cpus[cpu()].rq->rq_lock));
-  release(&proc_table_lock);
 
   initproc = p;
 
@@ -314,10 +312,7 @@ runIdle(void)
   c = &cpus[cpu()];
   p = idleproc[cpu()];
 
-  cprintf("begin run first proc in cpu[%d]\n", cpu());//debug
-
   sti();
-  acquire(&proc_table_lock);
   acquire(&(cpus[cpu()].rq->rq_lock));
   c->curproc = p;
   _check_curproc(2);
@@ -362,30 +357,11 @@ schedule(void){
   // may some bugs???
 }
 
-/*
-// Enter scheduler.  Must already hold proc_table_lock
-// and have changed curproc[cpu()]->state.
-void
-sched(void)
-{
-  if(read_eflags()&FL_IF)
-    panic("sched interruptible");
-  if(cp->state == RUNNING)
-    panic("sched running");
-  if(!holding(&proc_table_lock))
-    panic("sched proc_table_lock");
-  if(cpus[cpu()].ncli != 1)
-    panic("sched locks");
-
-  swtch(&cp->context, &cpus[cpu()].context);
-}*/
-
 // Give up the CPU for one scheduling round.
 void
 yield(void)
 {
   //lock the rq
-  acquire(&proc_table_lock);
   acquire(&(cpus[cpu()].rq->rq_lock));
   cp->state = RUNNABLE;
 
@@ -396,7 +372,6 @@ yield(void)
 
   // unlock rq
   release(&(cpus[cpu()].rq->rq_lock));
-  release(&proc_table_lock);
 }
 
 // A fork child's very first scheduling by scheduler()
@@ -406,7 +381,6 @@ forkret(void)
 {
   // Still holding proc_table_lock from scheduler.
   release(&(cpus[cpu()].rq->rq_lock));
-  release(&proc_table_lock);
 
   // Jump into assembly, never to return.
   forkret1(cp->tf);
@@ -442,10 +416,12 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   cp->chan = chan;
   cp->state = SLEEPING;
-  //sched();
+  release(&proc_table_lock);
+
   schedule();	// by jimmy
 
   // Tidy up.
+  acquire(&proc_table_lock);
   cp->chan = 0;
 
   // Reacquire original lock.
@@ -541,8 +517,8 @@ exit(void)
   cp->cwd = 0;
 
   // lock rq
-  acquire(&(cpus[cpu()].rq->rq_lock));
   acquire(&proc_table_lock);
+  acquire(&(cpus[cpu()].rq->rq_lock));
 
   // Parent might be sleeping in wait().
   wakeup1(cp->parent);
@@ -559,6 +535,7 @@ exit(void)
   // Jump into the scheduler, never to return.
   cp->killed = 0;
   cp->state = ZOMBIE;
+  release(&proc_table_lock);
   schedule();	//by jimmy
   panic("zombie exit");
 }
@@ -627,6 +604,8 @@ procdump(void)
   uint pc[10];
 
   acquire(&proc_table_lock);
+  for(i=0; i<ncpu; i++)
+    acquire(&(cpus[i].rq->rq_lock));
   cprintf("************************\n"); 
   for(i=0; i<ncpu; i++){
     p = cpus[i].curproc;
@@ -634,8 +613,8 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("On cpu %d, nproc=%d : pid %d, %s, %d\n", 
-	i, cpus[i].rq->proc_num, p->pid, state);
+    cprintf("On cpu %d, nproc=%d : curproc_pid %d, %s\n", 
+	i, cpus[i].rq->proc_num, p->pid);
   }
  
   for(i = 0; i < NPROC; i++){
@@ -655,6 +634,8 @@ procdump(void)
     cprintf("\n");
   }
   cprintf("************************\n");
+  for(i=0; i<ncpu; i++)
+    release(&(cpus[i].rq->rq_lock));
   release(&proc_table_lock); 
 }
 
@@ -696,7 +677,6 @@ void enqueue_proc(struct rq *rq, struct proc *p)
   if(rq->free_list == 0)
     panic("kernel panic: Do not support procs more than NPROC!(in enqueue_proc_simple)\n");
 
-  (rq->proc_num)++;
   rq->sched_class->enqueue_proc(rq, p);
   p->rq = rq;
 }
@@ -709,8 +689,6 @@ void dequeue_proc (struct rq *rq, struct proc *p)
   if(p == idleproc[cpu()])
     return;
   rq->sched_class->dequeue_proc(rq, p);
-
-  (rq->proc_num)--;
 }
 
 void yield_proc (struct rq *rq)

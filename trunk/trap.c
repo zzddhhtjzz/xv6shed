@@ -9,7 +9,7 @@
 #include "syscall.h"
 #include "rq.h"
 
-//#define LOAD_BALANCE_ON
+#define LOAD_BALANCE_ON
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];

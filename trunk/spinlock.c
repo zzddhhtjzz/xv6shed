@@ -28,6 +28,8 @@ acquire(struct spinlock *lock)
   // by jimmy:
   // return;
   // cprintf("acquire lock: %s\n", lock->name);
+  int spintime = 0;	//debug
+  int j;
 
   pushcli();
   if(holding(lock)){
@@ -38,8 +40,23 @@ acquire(struct spinlock *lock)
   // The xchg is atomic.
   // It also serializes, so that reads after acquire are not
   // reordered before it.  
-  while(xchg(&lock->locked, 1) == 1)
-    ;
+  while(xchg(&lock->locked, 1) == 1){
+    spintime++;
+    if(spintime == 100000000){	// for debug
+      cprintf("dead lock, lock name: %s, cpu %d, curcpu %d\n"
+        , lock->name, lock->cpu-10, cpu());
+      // src deadlock info
+      cprintf("src:");
+      for(j=0; j<10 && lock->pcs[j] != 0; j++)
+        cprintf(" %p", lock->pcs[j]);
+      cprintf("\n dst:");
+      // dst deadlock info
+      getcallerpcs(&lock, lock->pcs);
+      for(j=0; j<10 && lock->pcs[j] != 0; j++)
+        cprintf(" %p", lock->pcs[j]);
+      cprintf("\n");
+    }
+  }
 
   // Record info about lock acquisition for debugging.
   // The +10 is only so that we can tell the difference
