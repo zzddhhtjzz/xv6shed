@@ -12,7 +12,9 @@
 
 static char* rq_lock_name = "rqlock";
 
-#define SCHED_RR
+//#define SCHED_SIMPLE
+#define SCHED_FIFO
+//#define SCHED_RR
 
 #define _check_curproc(a) do{	\
 }while(0)\

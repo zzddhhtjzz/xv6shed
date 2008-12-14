@@ -23,7 +23,7 @@ testMatMul()
       matB[i][j] = 1;
     }
 
-  for(iter=0; iter<300000; iter++)
+  for(iter=0; iter<1000000; iter++)
   {
     // matmul
     for(i=0; i<MATSIZE; i++)
@@ -46,11 +46,10 @@ testMatMul()
   }
 
   // output
-  //printf(1, "result: %d", matB[0][0]);
 /*  for(i=0; i<MATSIZE; i++)
       for(j=0; j<MATSIZE; j++)
         printf(1, "%d ", matB[i][j]);*/
-  //printf(1, "\n");
+  printf(1, "pid %d done!\n", getpid());
 
   return;
 }
@@ -74,5 +73,11 @@ main(void){
   }
 
   printf(1, "All children have been create!\n");
+  i = 0;
+  while(i != 16){
+    if (wait() >= 0)
+      i++;
+  }
+  printf(1, "All children have been finish!\n");
   exit();
 }
