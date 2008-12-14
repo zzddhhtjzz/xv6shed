@@ -21,7 +21,7 @@ void init_rq_simple(struct rq* rq){
 void enqueue_proc_simple(struct rq *rq, struct proc *p){
   //cprintf("in enqueue: %x, free_list = %x\n", p->pid, rq->free_list);
   //_check_lock(&(rq->rq_lock), "enqueue_proc_simple no lock");
-  
+
   struct rq_node* pnode = rq->free_list;
   rq->free_list = pnode->next;
 
@@ -37,6 +37,8 @@ void enqueue_proc_simple(struct rq *rq, struct proc *p){
     rq->next_to_run->prev = pnode;
     pnode->next = rq->next_to_run;
   }
+
+  rq->proc_num ++;
 }
 
 void dequeue_proc_simple(struct rq *rq, struct proc *p){
@@ -70,6 +72,8 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
   // free
   cnode->next = rq->free_list;
   rq->free_list = cnode;
+
+  rq->proc_num --;
 }
 
 void yield_proc_simple(struct rq *rq){
@@ -119,13 +123,14 @@ void load_balance_simple(struct rq* rq){
   acquire(&(src_rq->rq_lock));
   num_procs_moved = src_rq->sched_class->get_proc(src_rq, procs_moved);
   release(&(src_rq->rq_lock));
+
   if(num_procs_moved != 0)
-    cprintf("Get some proc\n");
+    cprintf("load_balance\n");
+
   acquire(&(rq->rq_lock));
   for(i=0; i<num_procs_moved; i++) {
-    rq->sched_class->enqueue_proc(rq, procs_moved[i]);
+    enqueue_proc(rq, procs_moved[i]);
   }
-  rq->proc_num += num_procs_moved;
   release(&(rq->rq_lock));
 
   return;
@@ -133,14 +138,19 @@ void load_balance_simple(struct rq* rq){
 
 // by jimmy:
 int get_proc_simple(struct rq* rq, struct proc* procs_moved[]){
-  int num_procs_moved = rq->proc_num/2;
+  int num_procs_moved;
   int i;
-  struct rq_node* prev, *next;
+  struct rq_node* prev, *next, *cnode;
 
-  struct rq_node* cnode = rq->next_to_run->next;
+  num_procs_moved = rq->proc_num/2;
+
+  cnode = rq->next_to_run->next;
   for(i=0; i<num_procs_moved; i++){
-    if(cnode == rq->next_to_run)
+    if(cnode->next == 0){
+      release(&(rq->rq_lock));
+      cprintf("Wrong here: proc_num = %d\n", rq->proc_num);
       panic("Not enough proc to move in get_proc_simple\n");
+    }
     procs_moved[i] = cnode->proc;
     prev = cnode->prev, next = cnode->next;
     prev->next = next;

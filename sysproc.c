@@ -17,13 +17,11 @@ sys_fork(void)
     cprintf("sysfork failed here\n");
     return -1;
   }
-  acquire(&proc_table_lock);
   acquire(&(cpus[cpu()].rq->rq_lock));
   pid = np->pid;
   np->state = RUNNABLE;
   enqueue_proc(cpus[cpu()].rq, np);
   release(&(cpus[cpu()].rq->rq_lock));
-  release(&proc_table_lock);
   return pid;
 }
 
