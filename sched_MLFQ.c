@@ -16,7 +16,8 @@ void enqueue_proc_MLFQ(struct rq *rq, struct proc *p){
 }
 
 void dequeue_proc_MLFQ(struct rq *rq, struct proc *p){
-  p->rq->sub_sched_class->dequeue_proc(p->rq, p);
+  if (p->rq != NULL)
+    p->rq->sub_sched_class->dequeue_proc(p->rq, p);
 }
 
 void yield_proc_MLFQ(struct rq *rq){
@@ -56,8 +57,9 @@ void proc_tick_MLFQ(struct rq* rq, struct proc* p){
 	acquire(&(rq->rq_lock));
         p->rq->sub_sched_class->dequeue_proc(p->rq, p);
         p->rq->next->sub_sched_class->enqueue_proc(p->rq->next, p);
+	cp->state = RUNNABLE;
 	schedule();
-	release(&(rq->rq_lock));	
+	release(&(rq->rq_lock));
       }
     }
     // In fifo queue
@@ -99,13 +101,13 @@ void load_balance_MLFQ(struct rq* rq){
 
   acquire(&(rq->rq_lock));
   for (i = 0; i < num_procs_moved[0]; i++) {
-    enqueue_proc(rq, procs_moved[0][i]);
+    rq->sub_sched_class->enqueue_proc(rq, procs_moved[0][i]);
   }
   for (i = 0; i < num_procs_moved[1]; i++) {
-    enqueue_proc(rq->next, procs_moved[1][i]);
+    rq->next->sub_sched_class->enqueue_proc(rq->next, procs_moved[1][i]);
   }
   for (i = 0; i < num_procs_moved[2]; i++) {
-    enqueue_proc(rq->next->next, procs_moved[2][i]);
+    rq->next->next->sub_sched_class->enqueue_proc(rq->next->next, procs_moved[2][i]);
   }
   release(&(rq->rq_lock));
 
