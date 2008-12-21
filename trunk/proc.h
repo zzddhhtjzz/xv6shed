@@ -75,6 +75,7 @@ extern struct proc *initproc;
 extern struct proc *idleproc[];
 extern struct spinlock proc_table_lock;
 
+void schedule();
 void proc_tick(struct rq* rq, struct proc* p);
 void enqueue_proc(struct rq *rq, struct proc *p);
 void dequeue_proc (struct rq *rq, struct proc *p);
