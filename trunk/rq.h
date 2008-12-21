@@ -11,7 +11,6 @@ struct rq_node{
   struct rq_node* prev;	
 };
 
-// NEED TO BE MODIFIED for more general cases
 struct rq{
   struct spinlock rq_lock;
   struct rq_node nodes[NPROC];  // rq_node table
@@ -19,9 +18,12 @@ struct rq{
   struct rq_node* next_to_run;	// next proc to run
   struct rq_node* last_to_run;  // last proc to run
   struct rq_node* free_list;	// all the free proc
+  
+  // by cxyzs7
   int max_slices;		// Used for RR
   struct sched_class* sched_class;
   struct rq* next;		// next run queue (used in mlfq)
+  struct sched_class* sub_sched_class; // used in mlfq
 
   // by jimmy:
   int proc_num;

@@ -13,7 +13,7 @@ void init_rq_simple(struct rq* rq){
   int i;
 
   // mark all the nodes is free
-  for(i=0; i<NPROC; i++){
+  for(i = 0; i < NPROC; i++){
     rq->nodes[i].prev = NULL;
   }
 }
@@ -38,6 +38,7 @@ void enqueue_proc_simple(struct rq *rq, struct proc *p){
     pnode->next = rq->next_to_run;
   }
 
+  p->rq = rq;
   rq->proc_num ++;
 }
 
@@ -57,7 +58,6 @@ void dequeue_proc_simple(struct rq *rq, struct proc *p){
     }
   }
 
-//  cprintf("in dequeue: %s\n", p->name);
   // delete
   if(cnode->next == cnode){
     rq->next_to_run = 0;
@@ -85,15 +85,7 @@ struct proc* pick_next_proc_simple(struct rq *rq){
   struct rq_node* p_node = rq->next_to_run;
   if (p_node == NULL)
     return NULL;
-  else if (p_node->proc->state == RUNNABLE)
-    return p_node->proc;
-  p_node = p_node->next;
-  while (p_node != rq->next_to_run){
-    if (p_node->proc->state == RUNNABLE)
-      return p_node->proc;
-    p_node = p_node->next; 
-  }
-  return NULL;
+  return p_node->proc;
 }
 
 void proc_tick_simple(struct rq* rq, struct proc* p){

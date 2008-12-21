@@ -21,6 +21,7 @@ OBJS = \
 	sched.o\
 	sched_fifo.o\
 	sched_RR.o\
+	sched_MLFQ.o\
 	syscall.o\
 	sysfile.o\
 	sysproc.o\

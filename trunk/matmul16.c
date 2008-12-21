@@ -1,5 +1,3 @@
-// init: The initial user-level program
-
 #include "types.h"
 #include "stat.h"
 #include "user.h"
@@ -23,7 +21,7 @@ testMatMul()
       matB[i][j] = 1;
     }
 
-  for(iter=0; iter<1000000; iter++)
+  for(iter=0; iter<2000000; iter++)
   {
     // matmul
     for(i=0; i<MATSIZE; i++)
@@ -60,13 +58,15 @@ main(void){
   int pid;
 
   for(i=0; i<16; i++){
+    
     pid = fork();
+    
     if(pid < 0){
       printf(1, "matmul16 fork failed!\n");
       exit();
     }
-    if(pid != 0){
-      //printf(1, "matmul16: test%d begin\n", i);
+    if(pid == 0){
+      //printf(1, "matm	ul16: test%d begin\n", i);
       testMatMul();
       exit();
     }
@@ -74,10 +74,5 @@ main(void){
 
   printf(1, "All children have been create!\n");
   i = 0;
-  while(i != 16){
-    if (wait() >= 0)
-      i++;
-  }
-  printf(1, "All children have been finish!\n");
   exit();
 }
