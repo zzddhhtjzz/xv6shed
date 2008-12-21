@@ -15,8 +15,8 @@ static char* rq_lock_name = "rqlock";
 
 //#define SCHED_SIMPLE
 //#define SCHED_FIFO
-#define SCHED_RR
-//#define SCHED_MLFQ
+//#define SCHED_RR
+#define SCHED_MLFQ
 
 #define _check_curproc(a) do{	\
 }while(0)\
@@ -619,7 +619,10 @@ procdump(void)
 
   acquire(&proc_table_lock);
   for(i=0; i<ncpu; i++)
-    acquire(&(cpus[i].rq->rq_lock));
+  {
+    if(i != cpu())
+      acquire(&(cpus[i].rq->rq_lock));
+  }
   cprintf("************************\n"); 
   for(i=0; i<ncpu; i++){
     p = cpus[i].curproc;
@@ -655,7 +658,10 @@ procdump(void)
   }
   cprintf("************************\n");
   for(i = 0; i < ncpu; i++)
+  {
+    if(i != cpu())
     release(&(cpus[i].rq->rq_lock));
+  }
   release(&proc_table_lock); 
 }
 
