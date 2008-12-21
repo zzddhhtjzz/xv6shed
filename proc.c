@@ -8,13 +8,15 @@
 #include "sched.h"
 #include "sched_fifo.h"
 #include "sched_RR.h"
+#include "sched_MLFQ.h"
 #include "rq.h"
 
 static char* rq_lock_name = "rqlock";
 
 //#define SCHED_SIMPLE
-#define SCHED_FIFO
-//#define SCHED_RR
+//#define SCHED_FIFO
+#define SCHED_RR
+//#define SCHED_MLFQ
 
 #define _check_curproc(a) do{	\
 }while(0)\
@@ -38,7 +40,7 @@ int nextpid = 1;
 extern void forkret(void);
 extern void forkret1(struct trapframe*);
 
-void init_rq(struct rq* rq);
+void init_rq(struct rq *rq);
 void enqueue_proc (struct rq *rq, struct proc *p);
 void dequeue_proc (struct rq *rq, struct proc *p);
 void yield_proc (struct rq *rq);
@@ -50,9 +52,42 @@ pinit(void)
 {
   int i;
   initlock(&proc_table_lock, "proc_table");
-  for(i=0; i<NCPU; i++)
-    init_rq(&(rqs[i]));
-  for(i=0; i<NCPU; i++)
+  for(i = 0; i < NCPU; i++)
+  {
+    struct rq * rq = &rqs[i];
+#ifdef SCHED_SIMPLE
+    rq->sched_class = (struct sched_class *)&simple_sched_class;
+    rq->sub_sched_class = (struct sched_class *)&simple_sched_class;
+#endif
+#ifdef SCHED_FIFO
+    rq->sched_class = (struct sched_class *)&sched_class_fifo;
+    rq->sub_sched_class = (struct sched_class *)&sched_class_fifo;
+#endif
+#ifdef SCHED_RR
+    rq->sched_class = (struct sched_class *)&sched_class_RR;
+    rq->sub_sched_class = (struct sched_class *)&sched_class_RR;
+    rq->max_slices = 100;
+#endif
+#ifdef SCHED_MLFQ
+    rq->next = &rqs[i+NCPU];
+    rq->next->next = &rqs[i+2*NCPU];
+    rq->sched_class = (struct sched_class *)&sched_class_MLFQ;
+    rq->sub_sched_class = (struct sched_class *)&sched_class_RR;
+    rq->max_slices = 20;
+    rq->next->sched_class = (struct sched_class *)&sched_class_MLFQ;
+    rq->next->sub_sched_class = (struct sched_class *)&sched_class_RR;
+    rq->next->max_slices = 500;
+    rq->next->next->sched_class = (struct sched_class *)&sched_class_MLFQ;
+    rq->next->next->sub_sched_class = (struct sched_class *)&sched_class_fifo;
+#endif
+
+    init_rq(rq);
+#ifdef SCHED_MLFQ
+    init_rq(rq->next);
+    init_rq(rq->next->next);
+#endif
+  }
+  for(i = 0; i < NCPU; i++)
     cpus[i].rq = &(rqs[i]);
 }
 
@@ -186,29 +221,6 @@ copyproc(struct proc *p)
   np->tf->eax = 0;
   return np;
 }
-
-/*
-// alloc a idle process, just like what is doing up
-void
-allocidle(int cpuid){
-  struct proc* np = &(idleproc[cpuid]);
-  if((np->kstack = kalloc(KSTACKSIZE)) == 0){
-    np->state = UNUSED;
-    return;
-  }
-
-  np->tf = (struct trapframe*)(np->kstack + KSTACKSIZE) - 1;
-
-  // Set up new context to start executing at forkret (see below).
-  memset(&np->context, 0, sizeof(np->context));
-  np->context.eip = (uint)forkret;
-  np->context.esp = (uint)np->tf;
-
-  // Clear %eax so that fork system call returns 0 in child.
-  np->tf->eax = 0;
-  return;
-}
-*/
 
 struct proc*
 allocIdle(void){
@@ -346,6 +358,7 @@ schedule(void){
   }
   // get next proc to run 
   next = pick_next_proc(cpus[cpu()].rq);
+    
 
   // swtch
   c->curproc = next;
@@ -356,7 +369,6 @@ schedule(void){
   {
     swtch(&prev->context, &next->context);
   }
-  // may some bugs???
 }
 
 // Give up the CPU for one scheduling round.
@@ -615,8 +627,14 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("On cpu %d, nproc=%d : curproc_pid %d, %s\n", 
+#ifndef SCHED_MLFQ
+    cprintf("On cpu %d, nproc=%d : curproc_pid %d\n", 
 	i, cpus[i].rq->proc_num, p->pid);
+#else
+    cprintf("On cpu %d, rq1=%d, rq2=%d, rq3=%d : curproc_pid %d\n",
+	i, cpus[i].rq->proc_num, cpus[i].rq->next->proc_num, cpus[i].rq->next->next->proc_num, 
+	p->pid);
+#endif
   }
  
   for(i = 0; i < NPROC; i++){
@@ -636,34 +654,24 @@ procdump(void)
     cprintf("\n");
   }
   cprintf("************************\n");
-  for(i=0; i<ncpu; i++)
+  for(i = 0; i < ncpu; i++)
     release(&(cpus[i].rq->rq_lock));
   release(&proc_table_lock); 
 }
 
-void init_rq(struct rq* rq)
+void init_rq(struct rq *rq)
 {
   int i;
-
+ 
   // mark all the nodes is free
-  for(i=0; i<NPROC; i++){
+  for(i = 0; i < NPROC; i++){
     rq->nodes[i].proc = NULL;
     rq->nodes[i].next = &(rq->nodes[i]) + 1;
   }
   rq->nodes[NPROC-1].next = 0;
   rq->free_list = &(rq->nodes[0]);
   rq->next_to_run = NULL;
-#ifdef SCHED_SIMPLE
-  rq->sched_class = (struct sched_class *)&simple_sched_class;
-#endif
-#ifdef SCHED_FIFO
-  rq->sched_class = (struct sched_class *)&sched_class_fifo;
-#endif
-#ifdef SCHED_RR
-  rq->sched_class = (struct sched_class *)&sched_class_RR;
-  rq->max_slices = 10;
-#endif
-  rq->sched_class->init_rq(rq);
+  rq->sub_sched_class->init_rq(rq);
   rq->proc_num = 0;
 
   // init lock
@@ -680,7 +688,6 @@ void enqueue_proc(struct rq *rq, struct proc *p)
     panic("kernel panic: Do not support procs more than NPROC!(in enqueue_proc_simple)\n");
 
   rq->sched_class->enqueue_proc(rq, p);
-  p->rq = rq;
 }
 
 void dequeue_proc (struct rq *rq, struct proc *p)

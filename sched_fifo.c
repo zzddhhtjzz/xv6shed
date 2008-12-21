@@ -18,6 +18,7 @@ void enqueue_proc_fifo(struct rq *rq, struct proc *p){
   // insert after last_to_run
   pnode->proc = p;
   pnode->next = NULL;
+  
   if (rq->next_to_run == NULL){
     rq->next_to_run = rq->last_to_run = pnode;
   } else {
@@ -25,6 +26,7 @@ void enqueue_proc_fifo(struct rq *rq, struct proc *p){
     rq->last_to_run = pnode;
   }
 
+  p->rq = rq;
   rq->proc_num ++;
 }
 
@@ -63,51 +65,43 @@ struct proc* pick_next_proc_fifo(struct rq *rq){
   struct rq_node* p_node = rq->next_to_run;
   if (p_node == NULL)
     return NULL;
-  else if (p_node->proc->state == RUNNABLE)
-    return p_node->proc;
-  p_node = p_node->next;
-  while (p_node){
-    if (p_node->proc->state == RUNNABLE)
-      return p_node->proc;
-    p_node = p_node->next; 
-  }
-  return NULL;
+  return p_node->proc;
 }
 
 void proc_tick_fifo(struct rq* rq, struct proc* p){
   extern struct proc* idleproc[];
   if(p == idleproc[cpu()])
     yield();
-  return;
+  else;
 }
 
 void load_balance_fifo(struct rq* rq){
   int max = 0;
-  struct rq* src_rq = 0;
+  struct rq* src_rq = NULL;
   int i;
   struct proc* procs_moved[NPROC/2];
   int num_procs_moved;
   
   // find out the busiest rq
-  for(i=0; i<ncpu; i++){
-    if(rqs[i].proc_num > max){
+  for (i = 0; i < ncpu; i++){
+    if (rqs[i].proc_num > max){
       src_rq = &(rqs[i]);
       max = src_rq->proc_num;
     }
   }
-  if(src_rq == 0)
+  if(src_rq == NULL)
     return;
 
   // Get the proc from src_rq
   acquire(&(src_rq->rq_lock));
   num_procs_moved = src_rq->sched_class->get_proc(src_rq, procs_moved);
   release(&(src_rq->rq_lock));
-  if(num_procs_moved != 0)
+  if (num_procs_moved != 0)
     cprintf("Load balance\n");
   acquire(&(rq->rq_lock));
-  for(i=0; i<num_procs_moved; i++) {
+  for (i = 0; i < num_procs_moved; i++)
     enqueue_proc(rq, procs_moved[i]);
-  }
+  
   release(&(rq->rq_lock));
 
   return;
@@ -119,8 +113,8 @@ int get_proc_fifo(struct rq* rq, struct proc* procs_moved[]){
   struct rq_node *next;
 
   struct rq_node* cnode = rq->next_to_run;
-  for(i=0; i<num_procs_moved; i++){
-    if(cnode->next == 0){
+  for (i = 0; i < num_procs_moved; i++){
+    if (cnode->next == NULL){
       cprintf("Wrong here: proc_num = %d\n", rq->proc_num);
       panic("Not enough proc to move in get_proc_fifo\n");
     }

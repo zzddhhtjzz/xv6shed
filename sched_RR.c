@@ -10,7 +10,7 @@
 void init_rq_RR(struct rq* rq){
   int i;
 
-  for(i=0; i<NPROC; i++){
+  for(i = 0; i < NPROC; i++){
     rq->nodes[i].prev = NULL;
   }
 }
@@ -34,6 +34,7 @@ void enqueue_proc_RR(struct rq *rq, struct proc *p){
     rq->next_to_run->prev = pnode;
   }
 
+  p->rq = rq;
   rq->proc_num ++;
 }
 
@@ -72,26 +73,20 @@ struct proc* pick_next_proc_RR(struct rq *rq){
   struct rq_node* p_node = rq->next_to_run;
   if (p_node == NULL)
     return NULL;
-  else if (p_node->proc->state == RUNNABLE)
-    return p_node->proc;
-  p_node = p_node->next;
-  while (p_node != rq->next_to_run){
-    if (p_node->proc->state == RUNNABLE)
-      return p_node->proc;
-    p_node = p_node->next; 
-  }
-  return NULL;
+  return p_node->proc;
 }
 
 void proc_tick_RR(struct rq* rq, struct proc* p){
-  //_check_lock(&(rq->rq_lock), "proc_tick_RR no lock");
   if(p == idleproc[cpu()])
     yield();
-  p->timeslice--;	// may be some conflict here
-  if (p->timeslice == 0)
+  else
   {
-    p->timeslice = rq->max_slices;
-    yield();
+    p->timeslice--;
+    if (p->timeslice == 0)
+    {
+      p->timeslice = rq->max_slices;
+      yield();
+    }
   }
 }
 
